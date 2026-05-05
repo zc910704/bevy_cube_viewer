@@ -1,0 +1,8 @@
+[package]
+name = "bevy_cube_viewer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bevy = { path = "../../bevy", features = ["default"] }
+bevy_diagnostic = { path = "../../bevy/crates/bevy_diagnostic" }
