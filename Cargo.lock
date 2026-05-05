@@ -581,6 +581,7 @@ name = "bevy_cube_viewer"
 version = "0.1.0"
 dependencies = [
  "bevy",
+ "bevy_dev_tools",
  "bevy_diagnostic",
 ]
 
