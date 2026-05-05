@@ -6,7 +6,7 @@ use bevy::{
     input::mouse::AccumulatedMouseMotion,
     input::mouse::MouseWheel,
 };
-use bevy_diagnostic::LogDiagnosticsPlugin;
+use bevy_dev_tools::fps_overlay::FpsOverlayPlugin;
 
 use shared_state::SharedState;
 use cube_renderer::CubeRendererPlugin;
@@ -30,11 +30,14 @@ fn main() {
         .init_resource::<CameraState>()
         .add_plugins((
             DefaultPlugins,
-            LogDiagnosticsPlugin::default(),
+            FpsOverlayPlugin::default(),
             CubeRendererPlugin,
         ))
         .add_systems(Startup, setup)
-        .add_systems(Update, orbit_camera)
+        .add_systems(Update, (
+            orbit_camera,
+            adjust_cubes,
+        ))
         .run();
 }
 
@@ -78,4 +81,26 @@ fn orbit_camera(
     // 更新相机位置
     let target = Vec3::ZERO;
     camera.translation = target - camera.forward() * camera_state.orbit_distance;
+}
+
+fn adjust_cubes(
+    keyboard: Res<ButtonInput<KeyCode>>,
+    mut shared_state: ResMut<SharedState>,
+) {
+    let mut xyz = *shared_state.requested_xyz.lock().unwrap();
+    let (mut x, mut y, mut z) = xyz;
+
+    let shift = keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
+
+    if keyboard.just_pressed(KeyCode::KeyX) {
+        if shift { x = x.saturating_add(1); } else { x = x.saturating_sub(1).max(1); }
+    }
+    if keyboard.just_pressed(KeyCode::KeyY) {
+        if shift { y = y.saturating_add(1); } else { y = y.saturating_sub(1).max(1); }
+    }
+    if keyboard.just_pressed(KeyCode::KeyZ) {
+        if shift { z = z.saturating_add(1); } else { z = z.saturating_sub(1).max(1); }
+    }
+
+    *shared_state.requested_xyz.lock().unwrap() = (x, y, z);
 }

@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 bevy = { path = "../../bevy", features = ["default"] }
 bevy_diagnostic = { path = "../../bevy/crates/bevy_diagnostic" }
+bevy_dev_tools = { path = "../../bevy/crates/bevy_dev_tools" }
