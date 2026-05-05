@@ -1,5 +1,5 @@
+use bevy::prelude::{Component, Resource};
 use std::sync::{Arc, Mutex};
-use bevy::prelude::Resource;
 
 #[derive(Resource, Clone)]
 pub struct SharedState {
@@ -14,4 +14,11 @@ impl Default for SharedState {
             requested_xyz: Arc::new(Mutex::new((5, 5, 5))),
         }
     }
+}
+
+#[derive(Component)]
+pub struct CubePos {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
 }
