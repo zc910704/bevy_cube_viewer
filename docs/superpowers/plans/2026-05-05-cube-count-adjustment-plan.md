@@ -60,13 +60,14 @@ git commit -m "feat: 添加 CubePos 组件用于标记立方体位置"
 use bevy::{
     prelude::*,
 };
-use crate::shared_state::CubePos;
+use std::collections::HashMap;
+use crate::shared_state::{SharedState, CubePos};
 
 pub struct CubeRendererPlugin;
 
 impl Plugin for CubeRendererPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, spawn_cubes_system);
+        app.add_systems(Update, spawn_cubes_system.run_if(resource_changed::<SharedState>()));
     }
 }
 
@@ -74,54 +75,41 @@ fn spawn_cubes_system(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    shared_state: Res<crate::shared_state::SharedState>,
+    shared_state: Res<SharedState>,
+    query: Query<(Entity, &CubePos)>,
 ) {
-    let requested_xyz = *shared_state.requested_xyz.lock().unwrap();
-    let (target_x, target_y, target_z) = requested_xyz;
+    let (target_x, target_y, target_z) = *shared_state.requested_xyz.lock().unwrap();
 
-    // 获取当前已存在的立方体位置
-    let existing_cubes: Vec<(i32, i32, i32)> = CubePos::iter_in_world().map(|e| {
-        let pos = e.get::<CubePos>().unwrap();
-        (pos.x, pos.y, pos.z)
-    }).collect();
+    // 预创建 mesh 和 material（避免每帧重复创建）
+    let cube_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
+    let blue_material = materials.add(Color::srgb_u8(124, 144, 255));
 
-    // 计算目标位置集合
-    let mut target_positions: Vec<(i32, i32, i32)> = Vec::new();
-    let spacing = 1.5;
+    // 收集现有立方体位置到 HashMap（位置 -> 实体），用于 O(1) 查找
+    let existing: HashMap<(i32, i32, i32), Entity> = query.iter()
+        .map(|(e, pos)| ((pos.x, pos.y, pos.z), e))
+        .collect();
 
-    for x in 0..target_x as i32 {
-        for y in 0..target_y as i32 {
-            for z in 0..target_z as i32 {
-                target_positions.push((x, y, z));
-            }
-        }
-    }
+    // 目标位置集合
+    let target_positions: std::collections::HashSet<_> = (0..target_x as i32)
+        .flat_map(|x| (0..target_y as i32)
+            .flat_map(|y| (0..target_z as i32)
+                .map(move |z| (x, y, z))))
+        .collect();
 
-    // 找出需要删除的立方体（存在但不在目标中）
-    for pos in &existing_cubes {
+    // 删除多余立方体（存在但不在目标中）
+    for (pos, entity) in &existing {
         if !target_positions.contains(pos) {
-            // despawn 对应的实体
-            for entity in CubePos::iter_with_entity_in_world() {
-                if entity.get::<CubePos>().unwrap().x == pos.0
-                    && entity.get::<CubePos>().unwrap().y == pos.1
-                    && entity.get::<CubePos>().unwrap().z == pos.2
-                {
-                    commands.entity(entity).despawn();
-                    break;
-                }
-            }
+            commands.entity(*entity).despawn();
         }
     }
 
-    // 找出需要添加的立方体（目标中但不存在）
+    // 添加缺失立方体（目标中但不存在）
+    let spacing = 1.5;
     for target_pos in &target_positions {
-        if !existing_cubes.contains(target_pos) {
-            let cube_mesh = meshes.add(Cuboid::new(1.0, 1.0, 1.0));
-            let blue_material = materials.add(Color::srgb_u8(124, 144, 255));
-
+        if !existing.contains_key(target_pos) {
             commands.spawn((
-                Mesh3d(cube_mesh),
-                MeshMaterial3d(blue_material),
+                Mesh3d(cube_mesh.clone()),
+                MeshMaterial3d(blue_material.clone()),
                 Transform::from_xyz(
                     target_pos.0 as f32 * spacing,
                     target_pos.1 as f32 * spacing + 0.5,
@@ -137,6 +125,12 @@ fn spawn_cubes_system(
     }
 }
 ```
+
+**关键修正点：**
+1. 使用 `Query<(Entity, &CubePos)>` 而非不存在的静态方法
+2. 使用 `run_if(resource_changed::<SharedState>())` 只在状态变化时执行
+3. 使用 `HashMap<(i32,i32,i32), Entity>` 实现 O(1) 查找，避免 O(n²)
+4. Mesh/Material 在循环外创建一次，`clone()` 复用引用
 
 - [ ] **Step 2: 提交**
 
@@ -155,31 +149,6 @@ git commit -m "feat: 重写 CubeRendererPlugin 为增量更新系统"
 - [ ] **Step 1: 添加键盘输入系统**
 
 在 `main.rs` 中添加：
-
-```rust
-fn adjust_cubes(
-    keyboard: Res<ButtonInput<KeyCode>>,
-    mut shared_state: ResMut<SharedState>,
-) {
-    let mut xyz = *shared_state.requested_xyz.lock().unwrap();
-    let (mut x, mut y, mut z) = xyz;
-
-    if keyboard.just_pressed(KeyCode::KeyX) && !keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]) {
-        x = x.saturating_sub(1).max(1);
-    }
-    if keyboard.just_pressed(KeyCode::ShiftX) || (keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]) && keyboard.just_pressed(KeyCode::KeyX)) {
-        x = x.saturating_add(1);
-    }
-
-    // 类似处理 Y 和 Z...
-
-    shared_state.requested_xyz = Arc::new(Mutex::new((x, y, z)));
-}
-```
-
-注意：Bevy 的 `just_pressed` 配合 Shift 检测需要特殊处理，因为 Shift+X 会被操作系统识别为另一个键。可以使用 `ShiftX` 虚拟键或改用按住 Shift 时的替代方案。
-
-建议的简化方案：
 
 ```rust
 fn adjust_cubes(
