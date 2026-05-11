@@ -1,7 +1,5 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## 构建与运行
 
 ```bash
@@ -10,23 +8,28 @@ cargo run
 
 本项目依赖本地 Bevy 路径 (`../../bevy`)，确保 Bevy 仓库存在于正确的相对路径。
 
-## 项目架构
+## 项目概述
 
-这是一个 Bevy ECS 3D 应用程序，用于渲染和查看 3D 立方体网格。
+Bevy ECS 3D 应用，使用 GPU Instancing 渲染 64×1024×16 = 1,048,576 个正方体阵列。
 
-### 核心模块
+## 核心模块
 
-- **main.rs**: 应用入口，包含相机设置和轨道相机控制（鼠标左键旋转，滚轮缩放）
-- **cube_renderer.rs**: `CubeRendererPlugin` 自定义插件，在启动时生成 3D 立方体网格阵列
-- **shared_state.rs**: `SharedState` 资源，使用 `Arc<Mutex>` 在系统间共享状态
+- **main.rs**: 应用入口，插件注册，ESC 重置，系统编排
+- **cube_grid.rs**: 网格数据 (`CubeGrid`, `CrossSectionState`)，坐标计算，可见性筛选
+- **cube_material.rs**: 自定义渲染管线 (`CubeGridMaterialPlugin`)，GPU 实例缓冲，`DrawMeshInstanced` RenderCommand
+- **ui.rs**: `bevy_ui_widgets::Slider` 横截面滑块 UI
+- **camera.rs**: 轨道相机（鼠标左键旋转，滚轮缩放）
 
-### 关键设计
+## 坐标约定
 
-- `CubeRendererPlugin` 使用 `Startup` 系统在应用启动时生成 75 个立方体（5×3×5 阵列）
-- `SharedState` 提供跨系统共享的选中状态和请求坐标
-- 轨道相机系统使用 `AccumulatedMouseMotion` 和 `MouseWheel` 处理输入
+- X = 左右 (64)
+- Y = 深度 (1024)
+- Z = 上下 (16)
 
-### 依赖
+## 关键设计
 
-- `bevy`: 本地路径 `../../bevy`
-- `bevy_diagnostic::LogDiagnosticsPlugin`: 诊断信息输出
+- 单 Entity + 实例缓冲 = 单次 DrawCall 渲染所有正方体
+- `Transparent3d` 渲染阶段（Bevy 0.18 `Opaque3d` 使用 `ViewBinnedRenderPhases` 不兼容）
+- WGSL 着色器含漫反射光照 + 边缘暗化
+- `NoFrustumCulling` 防止单个 Entity AABB 导致全部实例被错误剔除
+- 滑块 0 = 该轴全显，1..DIM = 仅显示对应层

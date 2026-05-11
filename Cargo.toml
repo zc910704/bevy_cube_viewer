@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-bevy = { path = "../../bevy", features = ["default"] }
-bevy_diagnostic = { path = "../../bevy/crates/bevy_diagnostic" }
+bevy = { path = "../../bevy", features = ["default", "experimental_bevy_ui_widgets"] }
 bevy_dev_tools = { path = "../../bevy/crates/bevy_dev_tools" }
+bytemuck = "1.5"

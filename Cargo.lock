@@ -582,7 +582,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_dev_tools",
- "bevy_diagnostic",
+ "bytemuck",
 ]
 
 [[package]]
@@ -912,6 +912,7 @@ dependencies = [
  "bevy_transform",
  "bevy_ui",
  "bevy_ui_render",
+ "bevy_ui_widgets",
  "bevy_utils",
  "bevy_window",
  "bevy_winit",

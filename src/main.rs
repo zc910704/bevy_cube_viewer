@@ -1,106 +1,70 @@
-mod shared_state;
-mod cube_renderer;
+mod camera;
+mod cube_grid;
+mod cube_material;
+mod ui;
 
-use bevy::{
-    prelude::*,
-    input::mouse::AccumulatedMouseMotion,
-    input::mouse::MouseWheel,
+use bevy::prelude::*;
+use bevy::input_focus::{
+    tab_navigation::TabNavigationPlugin,
+    InputDispatchPlugin,
 };
 use bevy_dev_tools::fps_overlay::FpsOverlayPlugin;
+use bevy::ui_widgets::{UiWidgetsPlugins, SliderValue};
 
-use shared_state::SharedState;
-use cube_renderer::CubeRendererPlugin;
-
-#[derive(Resource)]
-struct CameraState {
-    orbit_distance: f32,
-}
-
-impl Default for CameraState {
-    fn default() -> Self {
-        Self { orbit_distance: 20.0 }
-    }
-}
+use camera::{CameraState, orbit_camera};
+use cube_grid::{CubeGrid, CrossSectionState};
+use cube_material::{CubeGridMaterialPlugin, spawn_cube_grid, update_instance_data};
+use ui::{
+    CubeGridSlider, setup_ui, update_slider_visuals, update_value_labels, on_slider_changed,
+};
 
 fn main() {
-    let shared_state = SharedState::default();
-
     App::new()
-        .insert_resource(shared_state)
-        .init_resource::<CameraState>()
         .add_plugins((
             DefaultPlugins,
             FpsOverlayPlugin::default(),
-            CubeRendererPlugin,
+            UiWidgetsPlugins,
+            InputDispatchPlugin,
+            TabNavigationPlugin,
+            CubeGridMaterialPlugin,
         ))
-        .add_systems(Startup, setup)
-        .add_systems(Update, (
-            orbit_camera,
-            adjust_cubes,
-        ))
+        .init_resource::<CubeGrid>()
+        .init_resource::<CrossSectionState>()
+        .init_resource::<CameraState>()
+        .add_systems(Startup, (setup_camera, spawn_cube_grid, setup_ui))
+        .add_systems(Update, orbit_camera)
+        .add_systems(Update, on_slider_changed)
+        .add_systems(Update, update_instance_data)
+        .add_systems(Update, update_slider_visuals)
+        .add_systems(Update, update_value_labels)
+        .add_systems(Update, handle_esc)
         .run();
 }
 
-fn setup(mut commands: Commands) {
+fn setup_camera(
+    mut commands: Commands,
+) {
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(5.0, 5.0, 5.0).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
-
-    commands.spawn((
-        PointLight {
-            shadows_enabled: true,
-            ..default()
-        },
-        Transform::from_xyz(3.0, 8.0, 5.0),
+        Transform::from_xyz(-80.0, 20.0, 0.0).looking_at(Vec3::ZERO, Vec3::Y),
+        bevy::render::view::NoIndirectDrawing,
     ));
 }
 
-fn orbit_camera(
-    mut camera: Single<&mut Transform, With<Camera>>,
-    mouse_buttons: Res<ButtonInput<MouseButton>>,
-    mouse_motion: Res<AccumulatedMouseMotion>,
-    mut mouse_wheel_reader: MessageReader<MouseWheel>,
-    mut camera_state: ResMut<CameraState>,
-) {
-    let delta = mouse_motion.delta;
-
-    // 鼠标左键旋转
-    if mouse_buttons.pressed(MouseButton::Left) {
-        let (yaw, pitch, roll) = camera.rotation.to_euler(EulerRot::YXZ);
-        let new_yaw = yaw - delta.x * 0.004;
-        let new_pitch = (pitch - delta.y * 0.003).clamp(-1.5, 1.5);
-        camera.rotation = Quat::from_euler(EulerRot::YXZ, new_yaw, new_pitch, roll);
-    }
-
-    // 滚轮调整距离
-    for event in mouse_wheel_reader.read() {
-        camera_state.orbit_distance = (camera_state.orbit_distance - event.y * 2.0).clamp(5.0, 100.0);
-    }
-
-    // 更新相机位置
-    let target = Vec3::ZERO;
-    camera.translation = target - camera.forward() * camera_state.orbit_distance;
-}
-
-fn adjust_cubes(
+fn handle_esc(
     keyboard: Res<ButtonInput<KeyCode>>,
-    mut shared_state: ResMut<SharedState>,
+    mut cross_section: ResMut<CrossSectionState>,
+    slider_query: Query<Entity, With<CubeGridSlider>>,
+    mut commands: Commands,
 ) {
-    let mut xyz = *shared_state.requested_xyz.lock().unwrap();
-    let (mut x, mut y, mut z) = xyz;
+    if keyboard.just_pressed(KeyCode::Escape) {
+        cross_section.x_slider = 0;
+        cross_section.y_slider = 0;
+        cross_section.z_slider = 0;
+        cross_section.dirty = true;
 
-    let shift = keyboard.any_pressed([KeyCode::ShiftLeft, KeyCode::ShiftRight]);
-
-    if keyboard.just_pressed(KeyCode::KeyX) {
-        if shift { x = x.saturating_add(1); } else { x = x.saturating_sub(1).max(1); }
+        for entity in &slider_query {
+            commands.entity(entity).insert(SliderValue(0.0));
+        }
     }
-    if keyboard.just_pressed(KeyCode::KeyY) {
-        if shift { y = y.saturating_add(1); } else { y = y.saturating_sub(1).max(1); }
-    }
-    if keyboard.just_pressed(KeyCode::KeyZ) {
-        if shift { z = z.saturating_add(1); } else { z = z.saturating_sub(1).max(1); }
-    }
-
-    *shared_state.requested_xyz.lock().unwrap() = (x, y, z);
 }
