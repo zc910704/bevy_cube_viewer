@@ -17,7 +17,8 @@ use cube_grid::{CubeGrid, CrossSectionState};
 use cube_material::{CubeGridMaterialPlugin, spawn_cube_grid, update_instance_data};
 use ui::{
     CubeGridSlider, setup_ui, update_slider_visuals, update_value_labels, on_slider_changed,
-    on_view_button_changed, update_button_visuals,
+    on_view_button_changed, update_button_visuals, update_hover_coords_panel,
+    update_hover_tooltip,
 };
 
 fn main() {
@@ -44,6 +45,8 @@ fn main() {
         .add_systems(Update, update_value_labels)
         .add_systems(Update, on_view_button_changed)
         .add_systems(Update, update_button_visuals)
+        .add_systems(Update, update_hover_coords_panel)
+        .add_systems(Update, update_hover_tooltip)
         .add_systems(Update, handle_esc)
         .run();
 }

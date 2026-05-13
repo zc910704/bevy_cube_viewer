@@ -8,7 +8,8 @@ use bevy::{
 };
 
 use crate::camera::ViewMode;
-use crate::cube_grid::{CrossSectionState, DIM_X, DIM_Y, DIM_Z};
+use crate::cube_grid::{compute_grid_position, CrossSectionState, DIM_X, DIM_Y, DIM_Z};
+use crate::picking::PickingState;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub enum SliderAxis {
@@ -33,6 +34,12 @@ pub struct CubeGridSliderThumb;
 
 #[derive(Component)]
 pub struct SliderValueText;
+
+#[derive(Component)]
+pub(crate) struct HoverCoordsText;
+
+#[derive(Component)]
+pub(crate) struct HoverTooltip;
 
 const SLIDER_TRACK_COLOR: Color = Color::srgb(0.1, 0.1, 0.12);
 const SLIDER_THUMB_COLOR: Color = Color::srgb(0.4, 0.7, 0.4);
@@ -83,6 +90,51 @@ pub fn setup_ui(mut commands: Commands) {
             BackgroundColor(BG_COLOR),
         ))
         .add_children(&[x_slider, y_slider, z_slider]);
+
+    // Coordinate display panel (bottom-right)
+    commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            bottom: Val::Px(16.0),
+            right: Val::Px(16.0),
+            padding: UiRect::all(Val::Px(12.0)),
+            border_radius: BorderRadius::all(Val::Px(8.0)),
+            ..default()
+        },
+        BackgroundColor(BG_COLOR),
+    )).with_children(|parent| {
+        parent.spawn((
+            Text::new("--"),
+            TextFont {
+                font_size: 14.0,
+                ..default()
+            },
+            TextColor(LABEL_COLOR),
+            HoverCoordsText,
+        ));
+    });
+
+    // Floating tooltip (screen-space, follows hovered cube)
+    commands.spawn((
+        Node {
+            position_type: PositionType::Absolute,
+            padding: UiRect::all(Val::Px(4.0)),
+            border_radius: BorderRadius::all(Val::Px(4.0)),
+            ..default()
+        },
+        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.85)),
+        Visibility::Hidden,
+        HoverTooltip,
+    )).with_children(|parent| {
+        parent.spawn((
+            Text::new(""),
+            TextFont {
+                font_size: 12.0,
+                ..default()
+            },
+            TextColor(Color::srgb(1.0, 0.8, 0.0)),
+        ));
+    });
 }
 
 fn build_button_bar(commands: &mut Commands) -> Entity {
@@ -354,5 +406,56 @@ pub fn update_button_visuals(
         } else {
             BTN_INACTIVE_COLOR
         };
+    }
+}
+
+/// Updates the fixed coordinate panel text from PickingState.
+pub(crate) fn update_hover_coords_panel(
+    picking: Res<PickingState>,
+    mut texts: Query<&mut Text, With<HoverCoordsText>>,
+) {
+    for mut text in &mut texts {
+        **text = match picking.hovered_cube {
+            Some((x, y, z)) => format!("X:{}  Y:{}  Z:{}", x, y, z),
+            None => "--".into(),
+        };
+    }
+}
+
+/// Positions the floating tooltip in screen space above the hovered cube.
+pub(crate) fn update_hover_tooltip(
+    picking: Res<PickingState>,
+    camera: Single<(&Camera, &GlobalTransform)>,
+    mut tooltip: Query<(&mut Node, &mut Visibility, &Children), With<HoverTooltip>>,
+    mut tooltip_texts: Query<&mut Text, Without<HoverTooltip>>,
+) {
+    let Ok((mut node, mut vis, children)) = tooltip.single_mut() else {
+        return;
+    };
+    let (camera, cam_transform) = camera.into_inner();
+
+    match picking.hovered_cube {
+        Some((x, y, z)) => {
+            let world_pos = compute_grid_position(x, y, z);
+            // Offset above the cube center
+            let label_pos = world_pos + Vec3::new(0.0, 0.8, 0.0);
+
+            if let Ok(screen_pos) = camera.world_to_viewport(cam_transform, label_pos) {
+                node.left = Val::Px(screen_pos.x - 35.0);
+                node.top = Val::Px(screen_pos.y - 12.0);
+                *vis = Visibility::Visible;
+            } else {
+                *vis = Visibility::Hidden;
+            }
+
+            for child in children.iter() {
+                if let Ok(mut text) = tooltip_texts.get_mut(child) {
+                    **text = format!("X:{} Y:{} Z:{}", x, y, z);
+                }
+            }
+        }
+        None => {
+            *vis = Visibility::Hidden;
+        }
     }
 }
