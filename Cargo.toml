@@ -7,3 +7,4 @@ edition = "2021"
 bevy = { path = "../../bevy", features = ["default", "experimental_bevy_ui_widgets"] }
 bevy_dev_tools = { path = "../../bevy/crates/bevy_dev_tools" }
 bytemuck = "1.5"
+rand = "0.8"

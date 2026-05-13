@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bytemuck::{Pod, Zeroable};
+use rand::Rng;
 
 // Coordinate convention: X = left/right, Y = depth, Z = up/down.
 pub const DIM_X: usize = 64;
@@ -21,16 +22,17 @@ pub struct InstanceData {
     pub color: [f32; 4],    // rgba
 }
 
-/// Flat bool array for 64×1024×16 cube colors (X=left/right, Y=depth, Z=up/down).
+/// Flat u8 array for 64×1024×16 cube colors: 0 = white, 1 = red, 2 = gray.
 #[derive(Resource, Clone)]
 pub struct CubeGrid {
-    pub data: Vec<bool>,
+    pub data: Vec<u8>,
 }
 
 impl Default for CubeGrid {
     fn default() -> Self {
+        let mut rng = rand::thread_rng();
         Self {
-            data: vec![false; TOTAL_CUBES],
+            data: (0..TOTAL_CUBES).map(|_| rng.gen_range(0..3)).collect(),
         }
     }
 }
@@ -42,13 +44,13 @@ impl CubeGrid {
     }
 
     #[inline]
-    pub fn get(&self, x: usize, y: usize, z: usize) -> bool {
+    pub fn get(&self, x: usize, y: usize, z: usize) -> u8 {
         self.data[Self::index(x, y, z)]
     }
 
     #[allow(dead_code)]
     #[inline]
-    pub fn set(&mut self, x: usize, y: usize, z: usize, value: bool) {
+    pub fn set(&mut self, x: usize, y: usize, z: usize, value: u8) {
         let idx = Self::index(x, y, z);
         self.data[idx] = value;
     }
@@ -88,6 +90,7 @@ pub fn compute_grid_position(x: usize, y: usize, z: usize) -> Vec3 {
     )
 }
 
+const WHITE_COLOR: [f32; 4] = [0.9, 0.9, 0.9, 1.0];
 const RED_COLOR: [f32; 4] = [0.8, 0.2, 0.2, 1.0];
 const GRAY_COLOR: [f32; 4] = [0.35, 0.35, 0.35, 1.0];
 
@@ -108,10 +111,10 @@ pub fn compute_visible_instances(
         for &y in &y_range {
             for &x in &x_range {
                 let pos = compute_grid_position(x, y, z);
-                let color = if grid.get(x, y, z) {
-                    RED_COLOR
-                } else {
-                    GRAY_COLOR
+                let color = match grid.get(x, y, z) {
+                    1 => RED_COLOR,
+                    2 => GRAY_COLOR,
+                    _ => WHITE_COLOR,
                 };
                 out.push(InstanceData {
                     position: [pos.x, pos.y, pos.z, 1.0],
