@@ -14,7 +14,7 @@ use bevy::ui_widgets::{UiWidgetsPlugins, SliderValue};
 
 use camera::{CameraState, ViewMode, orbit_camera};
 use cube_grid::{CubeGrid, CrossSectionState};
-use cube_material::{CubeGridMaterialPlugin, spawn_cube_grid, update_instance_data};
+use cube_material::{CubeGridMaterialPlugin, spawn_cube_grid, update_instance_data, update_hover_grid_data};
 use ui::{
     CubeGridSlider, setup_ui, update_slider_visuals, update_value_labels, on_slider_changed,
     on_view_button_changed, update_button_visuals, update_hover_coords_panel,
@@ -41,6 +41,7 @@ fn main() {
         .add_systems(Update, orbit_camera)
         .add_systems(Update, on_slider_changed)
         .add_systems(Update, update_instance_data)
+        .add_systems(Update, update_hover_grid_data)
         .add_systems(Update, update_slider_visuals)
         .add_systems(Update, update_value_labels)
         .add_systems(Update, on_view_button_changed)

@@ -27,47 +27,60 @@ use bevy::{
     },
 };
 
-use crate::cube_grid::{InstanceData, CubeGrid, CrossSectionState, compute_visible_instances, DIM_X, DIM_Y, DIM_Z};
+use bytemuck::{Pod, Zeroable};
+
+use crate::cube_grid::{InstanceData, CubeGrid, CrossSectionState, compute_visible_instances};
 use crate::picking::PickingState;
 
 const SHADER_PATH: &str = "shaders/cube_grid.wgsl";
-const HIGHLIGHT_COLOR: [f32; 4] = [1.0, 0.8, 0.0, 1.0];
 
-/// Replace the color of the hovered instance in the visible list.
-/// Uses the same z→y→x traversal order as compute_visible_instances.
-fn apply_highlight(
-    instances: &mut [InstanceData],
-    hover: (usize, usize, usize),
-    state: &CrossSectionState,
-) {
-    let z_range: Vec<usize> = if state.z_slider == 0 {
-        (0..DIM_Z).collect()
-    } else {
-        vec![(state.z_slider - 1) as usize]
-    };
-    let y_range: Vec<usize> = if state.y_slider == 0 {
-        (0..DIM_Y).collect()
-    } else {
-        vec![(state.y_slider - 1) as usize]
-    };
-    let x_range: Vec<usize> = if state.x_slider == 0 {
-        (0..DIM_X).collect()
-    } else {
-        vec![(state.x_slider - 1) as usize]
-    };
+/// Uniform buffer for shader-based hover highlight.
+/// Packed as 3×vec4<u32> for WGSL alignment.
+#[derive(Clone, Copy, Pod, Zeroable)]
+#[repr(C)]
+pub(crate) struct HoverUniform {
+    hover_grid: [u32; 4],  // x, y, z, has_hover (0 or 1)
+    grid_dims: [u32; 4],   // DIM_X, DIM_Y, DIM_Z, unused
+    cube_spacing: f32,
+    _pad: [f32; 3],        // align to 16 bytes
+}
 
-    let (hx, hy, hz) = hover;
-
-    let idx = x_range.binary_search(&hx).ok()
-        .and_then(|xi| y_range.binary_search(&hy).ok().map(|yi| (xi, yi)))
-        .and_then(|(xi, yi)| z_range.binary_search(&hz).ok().map(|zi| (xi, yi, zi)))
-        .map(|(xi, yi, zi)| xi + yi * x_range.len() + zi * x_range.len() * y_range.len());
-
-    if let Some(i) = idx {
-        if i < instances.len() {
-            instances[i].color = HIGHLIGHT_COLOR;
+impl Default for HoverUniform {
+    fn default() -> Self {
+        Self {
+            hover_grid: [0; 4],
+            grid_dims: [
+                crate::cube_grid::DIM_X as u32,
+                crate::cube_grid::DIM_Y as u32,
+                crate::cube_grid::DIM_Z as u32,
+                0,
+            ],
+            cube_spacing: crate::cube_grid::CUBE_SPACING,
+            _pad: [0.0; 3],
         }
     }
+}
+
+/// Main-world component: current hover target, extracted to render world.
+#[derive(Component, Clone)]
+pub(crate) struct HoverGridData(pub(crate) HoverUniform);
+
+impl ExtractComponent for HoverGridData {
+    type QueryData = &'static HoverGridData;
+    type QueryFilter = ();
+    type Out = Self;
+
+    fn extract_component(item: QueryItem<'_, '_, Self::QueryData>) -> Option<Self> {
+        Some(item.clone())
+    }
+}
+
+/// Render-world bind group for the hover uniform buffer.
+#[derive(Component)]
+struct HoverBindGroup {
+    #[allow(dead_code)]
+    buffer: Buffer,
+    bind_group: BindGroup,
 }
 
 // ── Main-world components ──
@@ -91,7 +104,10 @@ pub struct CubeGridMaterialPlugin;
 
 impl Plugin for CubeGridMaterialPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(ExtractComponentPlugin::<InstanceMaterialData>::default());
+        app.add_plugins((
+            ExtractComponentPlugin::<InstanceMaterialData>::default(),
+            ExtractComponentPlugin::<HoverGridData>::default(),
+        ));
         app.sub_app_mut(RenderApp)
             .add_render_command::<Transparent3d, DrawCubeGrid>()
             .init_resource::<SpecializedMeshPipelines<CubeGridPipeline>>()
@@ -101,6 +117,7 @@ impl Plugin for CubeGridMaterialPlugin {
                 (
                     queue_cube_grid.in_set(RenderSystems::QueueMeshes),
                     prepare_instance_buffers.in_set(RenderSystems::PrepareResources),
+                    prepare_hover_bind_group.in_set(RenderSystems::PrepareResources),
                 ),
             );
     }
@@ -112,16 +129,37 @@ impl Plugin for CubeGridMaterialPlugin {
 struct CubeGridPipeline {
     shader: Handle<Shader>,
     mesh_pipeline: MeshPipeline,
+    hover_bgl_desc: BindGroupLayoutDescriptor,
+    hover_bgl: BindGroupLayout,
 }
 
 fn init_pipeline(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mesh_pipeline: Res<MeshPipeline>,
+    render_device: Res<RenderDevice>,
 ) {
+    let entries = vec![BindGroupLayoutEntry {
+        binding: 0,
+        visibility: ShaderStages::VERTEX,
+        ty: BindingType::Buffer {
+            ty: BufferBindingType::Uniform,
+            has_dynamic_offset: false,
+            min_binding_size: None,
+        },
+        count: None,
+    }];
+    let hover_bgl = render_device.create_bind_group_layout("hover_uniform", &entries);
+    let hover_bgl_desc = BindGroupLayoutDescriptor {
+        label: "hover_uniform".into(),
+        entries,
+    };
+
     commands.insert_resource(CubeGridPipeline {
         shader: asset_server.load(SHADER_PATH),
         mesh_pipeline: mesh_pipeline.clone(),
+        hover_bgl_desc,
+        hover_bgl,
     });
 }
 
@@ -153,6 +191,7 @@ impl SpecializedMeshPipeline for CubeGridPipeline {
             ],
         });
         descriptor.fragment.as_mut().unwrap().shader = self.shader.clone();
+        descriptor.layout.push(self.hover_bgl_desc.clone());
         Ok(descriptor)
     }
 }
@@ -236,6 +275,30 @@ fn prepare_instance_buffers(
     }
 }
 
+fn prepare_hover_bind_group(
+    mut commands: Commands,
+    query: Query<(Entity, &HoverGridData), Changed<HoverGridData>>,
+    render_device: Res<RenderDevice>,
+    pipeline: Res<CubeGridPipeline>,
+) {
+    for (entity, hover_data) in &query {
+        let buffer = render_device.create_buffer_with_data(&BufferInitDescriptor {
+            label: Some("hover uniform buffer"),
+            contents: bytemuck::bytes_of(&hover_data.0),
+            usage: BufferUsages::UNIFORM | BufferUsages::COPY_DST,
+        });
+        let bind_group = render_device.create_bind_group(
+            None::<&str>,
+            &pipeline.hover_bgl,
+            &[BindGroupEntry {
+                binding: 0,
+                resource: buffer.as_entire_binding(),
+            }],
+        );
+        commands.entity(entity).insert(HoverBindGroup { buffer, bind_group });
+    }
+}
+
 // ── Draw command ──
 
 type DrawCubeGrid = (
@@ -255,13 +318,13 @@ impl<P: PhaseItem> RenderCommand<P> for DrawMeshInstanced {
         SRes<MeshAllocator>,
     );
     type ViewQuery = ();
-    type ItemQuery = Read<InstanceBuffer>;
+    type ItemQuery = (Read<InstanceBuffer>, Read<HoverBindGroup>);
 
     #[inline]
     fn render<'w>(
         item: &P,
         _view: (),
-        instance_buffer: Option<&'w InstanceBuffer>,
+        buffers: Option<(&'w InstanceBuffer, &'w HoverBindGroup)>,
         (meshes, render_mesh_instances, mesh_allocator): SystemParamItem<'w, '_, Self::Param>,
         pass: &mut TrackedRenderPass<'w>,
     ) -> RenderCommandResult {
@@ -275,7 +338,7 @@ impl<P: PhaseItem> RenderCommand<P> for DrawMeshInstanced {
         let Some(gpu_mesh) = meshes.into_inner().get(mesh_instance.mesh_asset_id) else {
             return RenderCommandResult::Skip;
         };
-        let Some(instance_buffer) = instance_buffer else {
+        let Some((instance_buffer, hover_bind_group)) = buffers else {
             return RenderCommandResult::Skip;
         };
         let Some(vertex_buffer_slice) =
@@ -286,6 +349,9 @@ impl<P: PhaseItem> RenderCommand<P> for DrawMeshInstanced {
 
         pass.set_vertex_buffer(0, vertex_buffer_slice.buffer.slice(..));
         pass.set_vertex_buffer(1, instance_buffer.buffer.slice(..));
+
+        // Bind hover uniform at group 3
+        pass.set_bind_group(3, &hover_bind_group.bind_group, &[]);
 
         match &gpu_mesh.buffer_info {
             RenderMeshBufferInfo::Indexed {
@@ -325,29 +391,45 @@ pub fn spawn_cube_grid(
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
         InstanceMaterialData(visible),
+        HoverGridData(HoverUniform::default()),
         Transform::IDENTITY,
         NoFrustumCulling,
     ));
 }
 
-// ── Update system (main world) ──
+// ── Update systems (main world) ──
 
+/// Rebuilds instance data when cross-section or grid changes (NO per-frame rebuild for hover).
 pub fn update_instance_data(
     grid: Res<CubeGrid>,
     cross_section: Res<CrossSectionState>,
-    picking: Res<PickingState>,
     mut query: Query<&mut InstanceMaterialData>,
 ) {
-    if !cross_section.is_changed() && !grid.is_changed() && !picking.is_changed() {
+    if !cross_section.is_changed() && !grid.is_changed() {
         return;
     }
-    let mut visible = compute_visible_instances(&grid, &cross_section);
-
-    if let Some(hover) = picking.hovered_cube {
-        apply_highlight(&mut visible, hover, &cross_section);
-    }
-
+    let visible = compute_visible_instances(&grid, &cross_section);
     for mut data in &mut query {
         data.0 = visible.clone();
+    }
+}
+
+/// Writes PickingState hover target into HoverGridData uniform for shader extraction.
+pub fn update_hover_grid_data(
+    picking: Res<PickingState>,
+    mut query: Query<&mut HoverGridData>,
+) {
+    if !picking.is_changed() {
+        return;
+    }
+    for mut data in &mut query {
+        match picking.hovered_cube {
+            Some((x, y, z)) => {
+                data.0.hover_grid = [x as u32, y as u32, z as u32, 1];
+            }
+            None => {
+                data.0.hover_grid = [0, 0, 0, 0];
+            }
+        }
     }
 }

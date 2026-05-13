@@ -1,5 +1,13 @@
 #import bevy_pbr::mesh_functions::{get_world_from_local, mesh_position_local_to_clip}
 
+struct HoverUniform {
+    hover_grid: vec4<u32>,   // x, y, z, has_hover (1 or 0)
+    grid_dims: vec4<u32>,    // DIM_X, DIM_Y, DIM_Z, unused
+    cube_spacing: f32,
+}
+
+@group(3) @binding(0) var<uniform> hover: HoverUniform;
+
 struct Vertex {
     @location(0) position: vec3<f32>,
     @location(1) normal: vec3<f32>,
@@ -26,6 +34,17 @@ fn vertex(vertex: Vertex) -> VertexOutput {
     out.world_normal = normalize((world_matrix * vec4<f32>(vertex.normal, 0.0)).xyz);
     out.uv = vertex.uv;
     out.color = vertex.i_color;
+
+    // Highlight hovered cube via uniform comparison
+    if hover.hover_grid.w != 0u {
+        let gx = u32(round(vertex.i_pos_scale.x / hover.cube_spacing + f32(hover.grid_dims.x - 1u) / 2.0));
+        let gy = u32(round(vertex.i_pos_scale.z / hover.cube_spacing + f32(hover.grid_dims.y - 1u) / 2.0));
+        let gz = u32(round(vertex.i_pos_scale.y / hover.cube_spacing + f32(hover.grid_dims.z - 1u) / 2.0));
+        if gx == hover.hover_grid.x && gy == hover.hover_grid.y && gz == hover.hover_grid.z {
+            out.color = vec4<f32>(1.0, 0.8, 0.0, 1.0);
+        }
+    }
+
     return out;
 }
 
