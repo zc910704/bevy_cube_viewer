@@ -1,6 +1,7 @@
 mod camera;
 mod cube_grid;
 mod cube_material;
+mod picking;
 mod ui;
 
 use bevy::prelude::*;
