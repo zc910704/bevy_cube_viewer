@@ -27,9 +27,48 @@ use bevy::{
     },
 };
 
-use crate::cube_grid::{InstanceData, CubeGrid, CrossSectionState, compute_visible_instances};
+use crate::cube_grid::{InstanceData, CubeGrid, CrossSectionState, compute_visible_instances, DIM_X, DIM_Y, DIM_Z};
+use crate::picking::PickingState;
 
 const SHADER_PATH: &str = "shaders/cube_grid.wgsl";
+const HIGHLIGHT_COLOR: [f32; 4] = [1.0, 0.8, 0.0, 1.0];
+
+/// Replace the color of the hovered instance in the visible list.
+/// Uses the same z→y→x traversal order as compute_visible_instances.
+fn apply_highlight(
+    instances: &mut [InstanceData],
+    hover: (usize, usize, usize),
+    state: &CrossSectionState,
+) {
+    let z_range: Vec<usize> = if state.z_slider == 0 {
+        (0..DIM_Z).collect()
+    } else {
+        vec![(state.z_slider - 1) as usize]
+    };
+    let y_range: Vec<usize> = if state.y_slider == 0 {
+        (0..DIM_Y).collect()
+    } else {
+        vec![(state.y_slider - 1) as usize]
+    };
+    let x_range: Vec<usize> = if state.x_slider == 0 {
+        (0..DIM_X).collect()
+    } else {
+        vec![(state.x_slider - 1) as usize]
+    };
+
+    let (hx, hy, hz) = hover;
+
+    let idx = x_range.binary_search(&hx).ok()
+        .and_then(|xi| y_range.binary_search(&hy).ok().map(|yi| (xi, yi)))
+        .and_then(|(xi, yi)| z_range.binary_search(&hz).ok().map(|zi| (xi, yi, zi)))
+        .map(|(xi, yi, zi)| xi + yi * x_range.len() + zi * x_range.len() * y_range.len());
+
+    if let Some(i) = idx {
+        if i < instances.len() {
+            instances[i].color = HIGHLIGHT_COLOR;
+        }
+    }
+}
 
 // ── Main-world components ──
 
@@ -296,12 +335,18 @@ pub fn spawn_cube_grid(
 pub fn update_instance_data(
     grid: Res<CubeGrid>,
     cross_section: Res<CrossSectionState>,
+    picking: Res<PickingState>,
     mut query: Query<&mut InstanceMaterialData>,
 ) {
-    if !cross_section.is_changed() && !grid.is_changed() {
+    if !cross_section.is_changed() && !grid.is_changed() && !picking.is_changed() {
         return;
     }
-    let visible = compute_visible_instances(&grid, &cross_section);
+    let mut visible = compute_visible_instances(&grid, &cross_section);
+
+    if let Some(hover) = picking.hovered_cube {
+        apply_highlight(&mut visible, hover, &cross_section);
+    }
+
     for mut data in &mut query {
         data.0 = visible.clone();
     }
