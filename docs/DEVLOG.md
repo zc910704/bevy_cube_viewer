@@ -22,7 +22,7 @@
 
 ### Bevy 0.18 Spawn API 变更
 
-**问题**: 
+**问题**:
 - `Children::spawn()` 需要 `Spawn()` 包装每个子实体
 - `Children::from_iter()` 不存在
 - `ChildBuilder` 类型不可导入
@@ -51,13 +51,13 @@
 
 **原因**: WGSL 着色器使用 `vertex.position * vertex.i_pos_scale.w + vertex.i_pos_scale.xyz` 计算顶点位置，其中 `.w` 是缩放因子。`InstanceData.position.w` 设为 `0.0`，导致所有正方体缩放为零体积。
 
-**解决**: 将 `position.w` 改为 `1.0`（`cube_grid.rs` 第 111、142 行）。
+**解决**: 将 `position.w` 改为 `1.0`。
 
 ### 根因 2: 滑块初始化误触发 Changed
 
 **现象**: 修复后只显示 1 个正方体（位于原点），日志显示实例数从 1,048,576 降到 1。
 
-**原因**: `bevy_ui_widgets` 的 Slider 组件在初始化阶段内部修改 `SliderValue`，触发 `Changed<SliderValue>`。`on_slider_changed` 系统将其误认为用户操作，设置 `show_all = false` 并将所有滑块归零，导致 `compute_visible_instances` 只返回坐标 (0,0,0) 处的 1 个正方体。
+**原因**: `bevy_ui_widgets` 的 Slider 组件在初始化阶段内部修改 `SliderValue`，触发 `Changed<SliderValue>`。`on_slider_changed` 系统将其误认为用户操作，导致滑块全部归零。
 
 **解决**: 在 `on_slider_changed` 中使用 `Local<bool>` 跳过首次触发。
 
@@ -79,7 +79,7 @@
 
 ### 滑块拖动时触发相机旋转
 
-**现象**: 拖动滑块滑块时，视角会同时旋转。
+**现象**: 拖动滑块时，视角会同时旋转。
 
 **原因**: 鼠标左键同时被相机系统和滑块系统响应。
 
@@ -87,8 +87,64 @@
 
 ---
 
-## 坐标约定调整
+## 坐标约定
 
 **问题**: 初始设计中 Y=16（上下）、Z=1024（深度）。用户采用 Y-up 坐标习惯，期望 Y=深度、Z=上下。
 
-**解决**: 交换 `DIM_Y` 和 `DIM_Z` 常量定义，更新 `compute_grid_position` 中的世界坐标映射（参数 y→世界 Z，参数 z→世界 Y）。滑块范围自动适配。
+**解决**: 交换 `DIM_Y` 和 `DIM_Z` 常量定义，更新 `compute_grid_position` 中的世界坐标映射（参数 y→世界 Z，参数 z→世界 Y）。
+
+---
+
+## 视图切换
+
+### 剖面模式鼠标拖动方向反转
+
+**现象**: 进入 X/Y/Z 剖面模式后，鼠标左键拖动时画面移动方向与预期相反。
+
+**原因**: 剖面平移逻辑使用 `+=`，而 3D 轨道模式旋转的 delta 方向与平移期望的"拖拽世界"手感不一致。
+
+**解决**: 将剖面平移的 delta 符号从 `+=` 改为 `-=`，使画面跟随鼠标拖动方向移动。
+
+### 模式切换后的相机距离
+
+**问题**: 从 3D 模式切换到剖面模式时，相机距离需要根据剖面可见范围自动调整，否则可能太近或太远。
+
+**解决**: 在 `orbit_camera` 中检测 `ViewMode` 变化，根据当前剖面的两个可见维度计算合适的 `section_distance`：`visible_extent = max(dim1, dim2) * CUBE_SPACING`，`distance = (visible_extent / 2) / tan(fov / 2)`。
+
+---
+
+## 悬停拾取
+
+### DDA 遍历坐标映射
+
+**问题**: DDA 遍历使用网格坐标，步进逻辑需要正确映射 world 坐标轴到网格坐标轴（world Z → grid Y, world Y → grid Z）。
+
+**关键代码注意**: `step_y` 基于 `dir.z`（world Z → grid Y），`step_z` 基于 `dir.y`（world Y → grid Z）。边界距离计算同样需要正确映射。
+
+### 悬停高亮方案演进
+
+**方案 A (CPU buffer 重建)**: 每帧检测 PickingState 变化，若有悬停目标则调用 `compute_visible_instances` 重建整个实例缓冲（32MB），将对应实例颜色替换为高亮色。每帧约 32MB CPU→GPU 数据传输。
+
+**方案 C (shader uniform) — 当前方案**: 仅更新 16 字节 HoverUniform（bind group 3），顶点着色器中根据实例位置反算网格坐标，与 `hover_grid` 比较，匹配时替换颜色。消除每帧 CPU buffer 重建开销，数据传输从 ~32MB 降至 16B。
+
+#### Shader 中的坐标反算
+
+顶点着色器中根据 `i_pos_scale.xyz` 反算网格坐标：
+```
+gx = (pos.x / cube_spacing + (DIM_X - 1) / 2).round()
+gy = (pos.z / cube_spacing + (DIM_Y - 1) / 2).round()  // world Z → grid Y
+gz = (pos.y / cube_spacing + (DIM_Z - 1) / 2).round()  // world Y → grid Z
+```
+需要与 `compute_grid_position` (cube_grid.rs) 的映射保持精确一致。
+
+### Camera 组件的 NoIndirectDrawing
+
+**问题**: Bevy 0.18 `ViewSortedRenderPhases` 要求相机 Entity 带有 `NoIndirectDrawing` 组件，否则渲染阶段调度失败。
+
+**解决**: `setup_camera` 中为相机 Entity 添加 `bevy::render::view::NoIndirectDrawing`。
+
+### 视图切换时 section_target 重置
+
+**问题**: 进入剖面模式时，`section_target` 应从 Vec3::ZERO 开始，而非保留上次剖面模式的偏移位置。
+
+**解决**: 每次切换到剖面模式时将 `camera_state.section_target = Vec3::ZERO`。

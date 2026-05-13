@@ -284,7 +284,7 @@ fn build_slider(commands: &mut Commands, axis: SliderAxis, max: f32, label: &str
             display: Display::Flex,
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(2.0),
-            width: Val::Px(280.0),
+            width: Val::Px(560.0),
             ..default()
         })
         .add_children(&[label_row, slider])
