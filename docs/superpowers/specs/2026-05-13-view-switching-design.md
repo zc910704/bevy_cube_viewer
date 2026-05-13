@@ -15,6 +15,10 @@ Add 4 view mode buttons (3D, X Section, Y Section, Z Section) to switch camera b
 - On section enter: auto-calculate distance to fit the visible extent in view
 - On 3D return: keep current camera position, infer orbit parameters from transform
 
+## Coordinate Mapping (Grid → World)
+
+Per project convention: X = world X (left/right), Y = world Z (depth), Z = world Y (up/down).
+
 ## New Types
 
 ### ViewMode (camera.rs)
@@ -41,23 +45,30 @@ pub struct CameraState {
 
 ## Camera Behavior Per Mode
 
+Rotation for section modes uses `Transform::looking_at(target, up)`. The up vector must be chosen so the view aligns with grid axes.
+
 ### ThreeD
 Unchanged from current: left-drag rotates (yaw/pitch), scroll changes orbit_distance.
 
-### SectionX (camera at +X, looking toward -X)
-- Rotation: `Quat::from_rotation_y(-PI/2)`
-- Screen horizontal = world Z (grid Y depth), Screen vertical = world Y (grid Z up/down)
-- Left-drag: pan section_target in YZ (world) plane
+### SectionX — view along grid X (world X)
+- Camera at +X world, looking toward -X (up = Vec3::Y)
+- Visible plane: world YZ
+- Screen horizontal → world Z (grid Y depth); Screen vertical → world Y (grid Z up/down)
+- Left-drag: pan section_target in world YZ plane
 - Scroll: adjust section_distance, clamped to [10, 2000]
 
-### SectionY (camera at +Z world, looking toward -Z)
-- Rotation: `Quat::IDENTITY` looking along -Z
-- Left-drag: pan section_target in XY (world) plane
+### SectionY — view along grid Y (world Z)
+- Camera at +Z world, looking toward -Z (up = Vec3::Y)
+- Visible plane: world XY
+- Screen horizontal → world X (grid X); Screen vertical → world Y (grid Z up/down)
+- Left-drag: pan section_target in world XY plane
 - Scroll: same as above
 
-### SectionZ (camera at +Y world, looking toward -Y)
-- Rotation: `Quat::from_rotation_x(PI/2)` looking toward -Y
-- Left-drag: pan section_target in XZ (world) plane
+### SectionZ — view along grid Z (world Y)
+- Camera at +Y world, looking toward -Y (up = Vec3::Z, since default up is Y and we're looking along Y)
+- Visible plane: world XZ
+- Screen horizontal → world X (grid X); Screen vertical → world Z (grid Y depth)
+- Left-drag: pan section_target in world XZ plane
 - Scroll: same as above
 
 ## Auto-Fit Distance
@@ -97,8 +108,9 @@ Both panels positioned at bottom-left, stacked vertically with a gap.
 UI button click
   → on_view_button_changed system → writes ViewMode Resource
   → ViewMode change detected in orbit_camera
-  → if 3D→Section: set fixed rotation, compute section_distance, reset section_target
-  → if Section→3D: keep transform, compute orbit_distance from camera.translation
+  → if 3D→Section: set rotation via looking_at, compute section_distance,
+      reset section_target = Vec3::ZERO (grid center)
+  → if Section→3D: keep transform, compute orbit_distance = camera.translation.distance(Vec3::ZERO)
   → per-frame: branch on ViewMode to handle input appropriately
 ```
 
