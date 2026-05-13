@@ -6,18 +6,13 @@ use bevy::ui_widgets::CoreSliderDragState;
 use crate::cube_grid::{DIM_X, DIM_Y, DIM_Z, CUBE_SPACING};
 use crate::ui::CubeGridSlider;
 
-#[derive(Resource, Clone, Copy, PartialEq, Eq)]
+#[derive(Resource, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ViewMode {
+    #[default]
     ThreeD,
     SectionX,
     SectionY,
     SectionZ,
-}
-
-impl Default for ViewMode {
-    fn default() -> Self {
-        Self::ThreeD
-    }
 }
 
 impl ViewMode {
@@ -48,6 +43,7 @@ impl Default for CameraState {
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn orbit_camera(
     camera: Single<(&mut Transform, &Projection), With<Camera>>,
     mouse_buttons: Res<ButtonInput<MouseButton>>,

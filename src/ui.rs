@@ -340,13 +340,13 @@ pub fn update_button_visuals(
     mut buttons: Query<(&ViewButtonAxis, &mut BackgroundColor, &Interaction)>,
 ) {
     for (axis, mut bg, interaction) in &mut buttons {
-        let is_active = match (*view_mode, axis) {
-            (ViewMode::ThreeD, ViewButtonAxis::ThreeD) => true,
-            (ViewMode::SectionX, ViewButtonAxis::X) => true,
-            (ViewMode::SectionY, ViewButtonAxis::Y) => true,
-            (ViewMode::SectionZ, ViewButtonAxis::Z) => true,
-            _ => false,
-        };
+        let is_active = matches!(
+            (*view_mode, axis),
+            (ViewMode::ThreeD, ViewButtonAxis::ThreeD)
+                | (ViewMode::SectionX, ViewButtonAxis::X)
+                | (ViewMode::SectionY, ViewButtonAxis::Y)
+                | (ViewMode::SectionZ, ViewButtonAxis::Z)
+        );
         bg.0 = if is_active {
             BTN_ACTIVE_COLOR
         } else if *interaction == Interaction::Hovered {
