@@ -113,7 +113,7 @@ pub fn orbit_camera(
                 let right = transform.rotation * Vec3::X;
                 let cam_up = transform.rotation * Vec3::Y;
                 let speed = camera_state.section_distance * 0.002;
-                camera_state.section_target +=
+                camera_state.section_target -=
                     right * delta.x * speed - cam_up * delta.y * speed;
             }
 
