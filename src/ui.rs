@@ -7,10 +7,19 @@ use bevy::{
     },
 };
 
+use crate::camera::ViewMode;
 use crate::cube_grid::{CrossSectionState, DIM_X, DIM_Y, DIM_Z};
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
 pub enum SliderAxis {
+    X,
+    Y,
+    Z,
+}
+
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+pub enum ViewButtonAxis {
+    ThreeD,
     X,
     Y,
     Z,
@@ -30,8 +39,36 @@ const SLIDER_THUMB_COLOR: Color = Color::srgb(0.4, 0.7, 0.4);
 const LABEL_COLOR: Color = Color::srgb(0.85, 0.85, 0.85);
 const BG_COLOR: Color = Color::srgba(0.02, 0.02, 0.04, 0.75);
 
+const BTN_INACTIVE_COLOR: Color = Color::srgb(0.1, 0.1, 0.12);
+const BTN_ACTIVE_COLOR: Color = Color::srgb(0.4, 0.7, 0.4);
+const BTN_HOVER_COLOR: Color = Color::srgb(0.6, 0.85, 0.6);
+
 pub fn setup_ui(mut commands: Commands) {
-    let panel = commands
+    // Build button bar content first to avoid borrow conflict.
+    let button_bar_row = build_button_bar(&mut commands);
+
+    // Button bar panel
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                bottom: Val::Px(16.0 + 150.0),
+                left: Val::Px(16.0),
+                flex_direction: FlexDirection::Column,
+                padding: UiRect::all(Val::Px(12.0)),
+                border_radius: BorderRadius::all(Val::Px(8.0)),
+                ..default()
+            },
+            BackgroundColor(BG_COLOR),
+        ))
+        .add_child(button_bar_row);
+
+    // Slider panel
+    let x_slider = build_slider(&mut commands, SliderAxis::X, DIM_X as f32, "X");
+    let y_slider = build_slider(&mut commands, SliderAxis::Y, DIM_Y as f32, "Y");
+    let z_slider = build_slider(&mut commands, SliderAxis::Z, DIM_Z as f32, "Z");
+
+    commands
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
@@ -45,13 +82,49 @@ pub fn setup_ui(mut commands: Commands) {
             },
             BackgroundColor(BG_COLOR),
         ))
+        .add_children(&[x_slider, y_slider, z_slider]);
+}
+
+fn build_button_bar(commands: &mut Commands) -> Entity {
+    let row = commands
+        .spawn(Node {
+            display: Display::Flex,
+            flex_direction: FlexDirection::Row,
+            column_gap: Val::Px(4.0),
+            ..default()
+        })
         .id();
 
-    let x_slider = build_slider(&mut commands, SliderAxis::X, DIM_X as f32, "X");
-    let y_slider = build_slider(&mut commands, SliderAxis::Y, DIM_Y as f32, "Y");
-    let z_slider = build_slider(&mut commands, SliderAxis::Z, DIM_Z as f32, "Z");
+    let buttons = [
+        (ViewButtonAxis::ThreeD, "3D"),
+        (ViewButtonAxis::X, "X 剖面"),
+        (ViewButtonAxis::Y, "Y 剖面"),
+        (ViewButtonAxis::Z, "Z 剖面"),
+    ];
 
-    commands.entity(panel).add_children(&[x_slider, y_slider, z_slider]);
+    for (axis, label) in buttons {
+        let btn = commands
+            .spawn((
+                Button,
+                Node {
+                    padding: UiRect::all(Val::Px(6.0)),
+                    border_radius: BorderRadius::all(Val::Px(4.0)),
+                    ..default()
+                },
+                BackgroundColor(BTN_INACTIVE_COLOR),
+                axis,
+                Text::new(label),
+                TextFont {
+                    font_size: 13.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.85, 0.85, 0.85)),
+            ))
+            .id();
+        commands.entity(row).add_child(btn);
+    }
+
+    row
 }
 
 fn build_slider(commands: &mut Commands, axis: SliderAxis, max: f32, label: &str) -> Entity {
@@ -240,5 +313,46 @@ pub fn on_slider_changed(
             SliderAxis::Z => cross_section.z_slider = val,
         }
         cross_section.dirty = true;
+    }
+}
+
+/// Sets ViewMode when a view button is pressed.
+pub fn on_view_button_changed(
+    mut interaction_query: Query<(&Interaction, &ViewButtonAxis), Changed<Interaction>>,
+    mut view_mode: ResMut<ViewMode>,
+) {
+    for (interaction, axis) in &mut interaction_query {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        *view_mode = match axis {
+            ViewButtonAxis::ThreeD => ViewMode::ThreeD,
+            ViewButtonAxis::X => ViewMode::SectionX,
+            ViewButtonAxis::Y => ViewMode::SectionY,
+            ViewButtonAxis::Z => ViewMode::SectionZ,
+        };
+    }
+}
+
+/// Updates button background color to reflect active view mode.
+pub fn update_button_visuals(
+    view_mode: Res<ViewMode>,
+    mut buttons: Query<(&ViewButtonAxis, &mut BackgroundColor, &Interaction)>,
+) {
+    for (axis, mut bg, interaction) in &mut buttons {
+        let is_active = match (*view_mode, axis) {
+            (ViewMode::ThreeD, ViewButtonAxis::ThreeD) => true,
+            (ViewMode::SectionX, ViewButtonAxis::X) => true,
+            (ViewMode::SectionY, ViewButtonAxis::Y) => true,
+            (ViewMode::SectionZ, ViewButtonAxis::Z) => true,
+            _ => false,
+        };
+        bg.0 = if is_active {
+            BTN_ACTIVE_COLOR
+        } else if *interaction == Interaction::Hovered {
+            BTN_HOVER_COLOR
+        } else {
+            BTN_INACTIVE_COLOR
+        };
     }
 }

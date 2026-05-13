@@ -11,11 +11,12 @@ use bevy::input_focus::{
 use bevy_dev_tools::fps_overlay::FpsOverlayPlugin;
 use bevy::ui_widgets::{UiWidgetsPlugins, SliderValue};
 
-use camera::{CameraState, orbit_camera};
+use camera::{CameraState, ViewMode, orbit_camera};
 use cube_grid::{CubeGrid, CrossSectionState};
 use cube_material::{CubeGridMaterialPlugin, spawn_cube_grid, update_instance_data};
 use ui::{
     CubeGridSlider, setup_ui, update_slider_visuals, update_value_labels, on_slider_changed,
+    on_view_button_changed, update_button_visuals,
 };
 
 fn main() {
@@ -31,12 +32,15 @@ fn main() {
         .init_resource::<CubeGrid>()
         .init_resource::<CrossSectionState>()
         .init_resource::<CameraState>()
+        .init_resource::<ViewMode>()
         .add_systems(Startup, (setup_camera, spawn_cube_grid, setup_ui))
         .add_systems(Update, orbit_camera)
         .add_systems(Update, on_slider_changed)
         .add_systems(Update, update_instance_data)
         .add_systems(Update, update_slider_visuals)
         .add_systems(Update, update_value_labels)
+        .add_systems(Update, on_view_button_changed)
+        .add_systems(Update, update_button_visuals)
         .add_systems(Update, handle_esc)
         .run();
 }
