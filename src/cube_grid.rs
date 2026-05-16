@@ -56,23 +56,46 @@ impl CubeGrid {
     }
 }
 
-/// Cross-section filter state, controlled by UI sliders and ESC key.
-/// Slider value 0 = show all layers on this axis; 1..=DIM = show only that layer.
+/// Filter mode for cube visibility.
+#[derive(Clone, Copy, PartialEq, Eq, Default)]
+pub enum SelectionMode {
+    #[default]
+    Section,
+    Range,
+}
+
+/// Grid filter state, controlled by UI sliders and ESC key.
+/// Section mode: slider 0 = show all layers on this axis; 1..=DIM = show only that layer.
+/// Range mode: min..=max filter; min=0 and max=DIM means no limit on that side.
 #[derive(Resource, Clone)]
-pub struct CrossSectionState {
+pub struct RangeSelectionState {
     pub x_slider: u32,
     pub y_slider: u32,
     pub z_slider: u32,
+    pub x_min: u32,
+    pub x_max: u32,
+    pub y_min: u32,
+    pub y_max: u32,
+    pub z_min: u32,
+    pub z_max: u32,
+    pub mode: SelectionMode,
     /// Set to true when sliders change — triggers instance buffer rebuild.
     pub dirty: bool,
 }
 
-impl Default for CrossSectionState {
+impl Default for RangeSelectionState {
     fn default() -> Self {
         Self {
             x_slider: 0,
             y_slider: 0,
             z_slider: 0,
+            x_min: 0,
+            x_max: DIM_X as u32,
+            y_min: 0,
+            y_max: DIM_Y as u32,
+            z_min: 0,
+            z_max: DIM_Z as u32,
+            mode: SelectionMode::default(),
             dirty: true,
         }
     }
@@ -95,14 +118,22 @@ const RED_COLOR: [f32; 4] = [0.8, 0.2, 0.2, 1.0];
 const GRAY_COLOR: [f32; 4] = [0.35, 0.35, 0.35, 1.0];
 
 /// Build the list of InstanceData for all cubes that should currently be visible.
-/// Slider value 0 = show all layers on this axis; 1..=DIM = show only that layer.
 pub fn compute_visible_instances(
     grid: &CubeGrid,
-    state: &CrossSectionState,
+    state: &RangeSelectionState,
 ) -> Vec<InstanceData> {
-    let x_range = axis_range(state.x_slider, DIM_X);
-    let y_range = axis_range(state.y_slider, DIM_Y);
-    let z_range = axis_range(state.z_slider, DIM_Z);
+    let (x_range, y_range, z_range) = match state.mode {
+        SelectionMode::Section => (
+            axis_range(state.x_slider, DIM_X),
+            axis_range(state.y_slider, DIM_Y),
+            axis_range(state.z_slider, DIM_Z),
+        ),
+        SelectionMode::Range => (
+            range_axis_range(state.x_min, state.x_max, DIM_X),
+            range_axis_range(state.y_min, state.y_max, DIM_Y),
+            range_axis_range(state.z_min, state.z_max, DIM_Z),
+        ),
+    };
 
     let count = x_range.len() * y_range.len() * z_range.len();
     let mut out = Vec::with_capacity(count);
@@ -132,4 +163,10 @@ fn axis_range(slider: u32, dim: usize) -> Vec<usize> {
     } else {
         vec![(slider - 1) as usize]
     }
+}
+
+fn range_axis_range(min: u32, max: u32, dim: usize) -> Vec<usize> {
+    let lo = (min.saturating_sub(1)) as usize;
+    let hi = (max.min(dim as u32).saturating_sub(1)) as usize;
+    (lo..=hi).collect()
 }
