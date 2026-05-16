@@ -13,12 +13,13 @@ use bevy_dev_tools::fps_overlay::FpsOverlayPlugin;
 use bevy::ui_widgets::{UiWidgetsPlugins, SliderValue};
 
 use camera::{CameraState, ViewMode, orbit_camera};
-use cube_grid::{CubeGrid, CrossSectionState};
+use cube_grid::{CubeGrid, RangeSelectionState, SelectionMode, DIM_X, DIM_Y, DIM_Z};
 use cube_material::{CubeGridMaterialPlugin, spawn_cube_grid, update_instance_data, update_hover_grid_data};
 use ui::{
     CubeGridSlider, setup_ui, update_slider_visuals, update_value_labels, on_slider_changed,
-    on_view_button_changed, update_button_visuals, update_hover_coords_panel,
-    update_hover_tooltip,
+    on_view_button_changed, on_mode_button_changed, update_button_visuals,
+    update_hover_coords_panel, update_hover_tooltip,
+    update_cube_count, sync_range_sliders,
 };
 
 fn main() {
@@ -32,7 +33,7 @@ fn main() {
             CubeGridMaterialPlugin,
         ))
         .init_resource::<CubeGrid>()
-        .init_resource::<CrossSectionState>()
+        .init_resource::<RangeSelectionState>()
         .init_resource::<CameraState>()
         .init_resource::<ViewMode>()
         .init_resource::<picking::PickingState>()
@@ -45,7 +46,10 @@ fn main() {
         .add_systems(Update, update_slider_visuals)
         .add_systems(Update, update_value_labels)
         .add_systems(Update, on_view_button_changed)
+        .add_systems(Update, on_mode_button_changed)
         .add_systems(Update, update_button_visuals)
+        .add_systems(Update, update_cube_count)
+        .add_systems(Update, sync_range_sliders)
         .add_systems(Update, update_hover_coords_panel)
         .add_systems(Update, update_hover_tooltip)
         .add_systems(Update, handle_esc)
@@ -64,15 +68,27 @@ fn setup_camera(
 
 fn handle_esc(
     keyboard: Res<ButtonInput<KeyCode>>,
-    mut cross_section: ResMut<CrossSectionState>,
+    mut state: ResMut<RangeSelectionState>,
     slider_query: Query<Entity, With<CubeGridSlider>>,
     mut commands: Commands,
 ) {
     if keyboard.just_pressed(KeyCode::Escape) {
-        cross_section.x_slider = 0;
-        cross_section.y_slider = 0;
-        cross_section.z_slider = 0;
-        cross_section.dirty = true;
+        match state.mode {
+            SelectionMode::Section => {
+                state.x_slider = 0;
+                state.y_slider = 0;
+                state.z_slider = 0;
+            }
+            SelectionMode::Range => {
+                state.x_min = 0;
+                state.x_max = DIM_X as u32;
+                state.y_min = 0;
+                state.y_max = DIM_Y as u32;
+                state.z_min = 0;
+                state.z_max = DIM_Z as u32;
+            }
+        }
+        state.dirty = true;
 
         for entity in &slider_query {
             commands.entity(entity).insert(SliderValue(0.0));
