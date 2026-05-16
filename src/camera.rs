@@ -2,9 +2,15 @@ use bevy::prelude::*;
 use bevy::input::mouse::AccumulatedMouseMotion;
 use bevy::input::mouse::MouseWheel;
 use bevy::ui_widgets::CoreSliderDragState;
+use bevy::window::Window;
 
 use crate::cube_grid::{DIM_X, DIM_Y, DIM_Z, CUBE_SPACING};
 use crate::ui::CubeGridSlider;
+
+/// 平移灵敏度：1.0 = 鼠标像素与场景移动 1:1 匹配
+const PAN_SENSITIVITY: f32 = 0.4;
+/// 3D 轨道旋转基础灵敏度
+const ORBIT_SENSITIVITY: f32 = 0.0035;
 
 #[derive(Resource, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ViewMode {
@@ -53,6 +59,7 @@ pub fn orbit_camera(
     view_mode: Res<ViewMode>,
     mut prev_mode: Local<Option<ViewMode>>,
     slider_drag: Query<&CoreSliderDragState, With<CubeGridSlider>>,
+    windows: Query<&Window>,
 ) {
     let (mut transform, projection) = camera.into_inner();
     let delta = mouse_motion.delta;
@@ -91,8 +98,10 @@ pub fn orbit_camera(
         ViewMode::ThreeD => {
             if mouse_buttons.pressed(MouseButton::Left) && !dragging_slider {
                 let (yaw, pitch, roll) = transform.rotation.to_euler(EulerRot::YXZ);
-                let new_yaw = yaw - delta.x * 0.004;
-                let new_pitch = (pitch - delta.y * 0.003).clamp(-1.5, 1.5);
+                let distance_scale = (80.0 / camera_state.orbit_distance).sqrt();
+                let new_yaw = yaw - delta.x * ORBIT_SENSITIVITY * distance_scale;
+                let new_pitch =
+                    (pitch - delta.y * ORBIT_SENSITIVITY * distance_scale).clamp(-1.5, 1.5);
                 transform.rotation =
                     Quat::from_euler(EulerRot::YXZ, new_yaw, new_pitch, roll);
             }
@@ -112,9 +121,18 @@ pub fn orbit_camera(
             if mouse_buttons.pressed(MouseButton::Left) && !dragging_slider {
                 let right = transform.rotation * Vec3::X;
                 let cam_up = transform.rotation * Vec3::Y;
-                let speed = camera_state.section_distance * 0.002;
+                // Pan speed based on visible world extent at focal plane:
+                // 1 pixel drag = 1 pixel world movement at the target distance
+                let fov = match projection {
+                    Projection::Perspective(p) => p.fov,
+                    _ => std::f32::consts::FRAC_PI_3,
+                };
+                let viewport_h = windows.single().map(|w| w.height()).unwrap_or(1080.0);
+                let pan_speed = 2.0 * camera_state.section_distance
+                    * (fov / 2.0).tan() / viewport_h
+                    * PAN_SENSITIVITY;
                 camera_state.section_target -=
-                    right * delta.x * speed - cam_up * delta.y * speed;
+                    right * delta.x * pan_speed - cam_up * delta.y * pan_speed;
             }
 
             for event in mouse_wheel_reader.read() {
