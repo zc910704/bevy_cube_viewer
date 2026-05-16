@@ -29,7 +29,7 @@ use bevy::{
 
 use bytemuck::{Pod, Zeroable};
 
-use crate::cube_grid::{InstanceData, CubeGrid, CrossSectionState, compute_visible_instances};
+use crate::cube_grid::{InstanceData, CubeGrid, RangeSelectionState, compute_visible_instances};
 use crate::picking::PickingState;
 
 const SHADER_PATH: &str = "shaders/cube_grid.wgsl";
@@ -384,9 +384,9 @@ pub fn spawn_cube_grid(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     grid: Res<CubeGrid>,
-    cross_section: Res<CrossSectionState>,
+    state: Res<RangeSelectionState>,
 ) {
-    let visible = compute_visible_instances(&grid, &cross_section);
+    let visible = compute_visible_instances(&grid, &state);
     info!("Spawn cube grid: {} instances", visible.len());
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
@@ -402,13 +402,13 @@ pub fn spawn_cube_grid(
 /// Rebuilds instance data when cross-section or grid changes (NO per-frame rebuild for hover).
 pub fn update_instance_data(
     grid: Res<CubeGrid>,
-    cross_section: Res<CrossSectionState>,
+    state: Res<RangeSelectionState>,
     mut query: Query<&mut InstanceMaterialData>,
 ) {
-    if !cross_section.is_changed() && !grid.is_changed() {
+    if !state.is_changed() && !grid.is_changed() {
         return;
     }
-    let visible = compute_visible_instances(&grid, &cross_section);
+    let visible = compute_visible_instances(&grid, &state);
     for mut data in &mut query {
         data.0 = visible.clone();
     }
