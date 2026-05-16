@@ -2,7 +2,7 @@ use bevy::{
     ecs::observer::On,
     picking::hover::Hovered,
     prelude::*,
-    ui::Checkable,
+    ui::{Checkable, Checked},
     ui_widgets::{
         observe, slider_self_update, Checkbox, checkbox_self_update, CoreSliderDragState, Slider,
         SliderRange, SliderThumb, SliderValue, TrackClick, ValueChange,
@@ -1076,5 +1076,21 @@ pub fn on_failbit_changed(
     if checkbox.contains(value_change.source) {
         state.only_failbit = value_change.value;
         state.dirty = true;
+    }
+}
+
+/// Updates checkbox background color to reflect checked state.
+pub fn update_checkbox_visuals(
+    checkbox: Query<Has<Checked>, With<FailBitCheckbox>>,
+    mut bg: Query<&mut BackgroundColor, With<FailBitCheckbox>>,
+) {
+    if let Ok(is_checked) = checkbox.single() {
+        if let Ok(mut bg) = bg.single_mut() {
+            bg.0 = if is_checked {
+                BTN_ACTIVE_COLOR
+            } else {
+                BTN_INACTIVE_COLOR
+            };
+        }
     }
 }

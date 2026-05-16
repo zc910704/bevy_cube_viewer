@@ -21,7 +21,7 @@ use ui::{
     on_view_button_changed, on_mode_button_changed, update_button_visuals,
     update_hover_coords_panel, update_hover_tooltip,
     update_cube_count, sync_range_sliders,
-    FailBitCheckbox, on_failbit_changed,
+    FailBitCheckbox, on_failbit_changed, update_checkbox_visuals,
 };
 
 fn main() {
@@ -56,6 +56,7 @@ fn main() {
         .add_systems(Update, update_hover_tooltip)
         .add_systems(Update, handle_esc)
         .add_observer(on_failbit_changed)
+        .add_systems(Update, update_checkbox_visuals)
         .run();
 }
 
