@@ -79,6 +79,7 @@ pub struct RangeSelectionState {
     pub z_min: u32,
     pub z_max: u32,
     pub mode: SelectionMode,
+    pub only_failbit: bool,
     /// Set to true when sliders change — triggers instance buffer rebuild.
     pub dirty: bool,
 }
@@ -96,6 +97,7 @@ impl Default for RangeSelectionState {
             z_min: 1,
             z_max: DIM_Z as u32,
             mode: SelectionMode::default(),
+            only_failbit: false,
             dirty: true,
         }
     }
@@ -142,6 +144,9 @@ pub fn compute_visible_instances(
         for &y in &y_range {
             for &x in &x_range {
                 let pos = compute_grid_position(x, y, z);
+                if state.only_failbit && grid.get(x, y, z) != 1 {
+                    continue;
+                }
                 let color = match grid.get(x, y, z) {
                     1 => RED_COLOR,
                     2 => GRAY_COLOR,
