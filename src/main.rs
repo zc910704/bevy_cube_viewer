@@ -69,7 +69,7 @@ fn setup_camera(
 fn handle_esc(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut state: ResMut<RangeSelectionState>,
-    slider_query: Query<Entity, With<CubeGridSlider>>,
+    section_sliders: Query<Entity, (With<CubeGridSlider>, With<crate::ui::SliderAxis>)>,
     mut commands: Commands,
 ) {
     if keyboard.just_pressed(KeyCode::Escape) {
@@ -80,17 +80,18 @@ fn handle_esc(
                 state.z_slider = 0;
             }
             SelectionMode::Range => {
-                state.x_min = 0;
+                state.x_min = 1;
                 state.x_max = DIM_X as u32;
-                state.y_min = 0;
+                state.y_min = 1;
                 state.y_max = DIM_Y as u32;
-                state.z_min = 0;
+                state.z_min = 1;
                 state.z_max = DIM_Z as u32;
             }
         }
         state.dirty = true;
 
-        for entity in &slider_query {
+        // Section sliders reset to 0 (show all); range sliders synced by sync_range_sliders.
+        for entity in &section_sliders {
             commands.entity(entity).insert(SliderValue(0.0));
         }
     }

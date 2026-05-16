@@ -8,7 +8,9 @@ use bevy::{
 };
 
 use crate::camera::ViewMode;
-use crate::cube_grid::{compute_grid_position, RangeSelectionState, SelectionMode, DIM_X, DIM_Y, DIM_Z};
+use crate::cube_grid::{
+    compute_grid_position, RangeSelectionState, SelectionMode, DIM_X, DIM_Y, DIM_Z,
+};
 use crate::picking::PickingState;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
@@ -66,7 +68,7 @@ pub(crate) struct ButtonBarPanel;
 #[derive(Component)]
 pub(crate) struct HoverTooltip;
 
-const SECTION_PANEL_HEIGHT: f32 = 140.0;
+const SECTION_PANEL_HEIGHT: f32 = 150.0;
 const RANGE_PANEL_HEIGHT: f32 = 310.0;
 
 const SLIDER_TRACK_COLOR: Color = Color::srgb(0.1, 0.1, 0.12);
@@ -123,38 +125,108 @@ pub fn setup_ui(mut commands: Commands) {
         .add_children(&[x_slider, y_slider, z_slider]);
 
     // Range slider panel (hidden by default)
-    let x_min = build_range_slider(&mut commands, RangeSliderAxis::XMin, DIM_X as f32, 0.0, "min");
-    let x_max = build_range_slider(&mut commands, RangeSliderAxis::XMax, DIM_X as f32, DIM_X as f32, "max");
-    let y_min = build_range_slider(&mut commands, RangeSliderAxis::YMin, DIM_Y as f32, 0.0, "min");
-    let y_max = build_range_slider(&mut commands, RangeSliderAxis::YMax, DIM_Y as f32, DIM_Y as f32, "max");
-    let z_min = build_range_slider(&mut commands, RangeSliderAxis::ZMin, DIM_Z as f32, 0.0, "min");
-    let z_max = build_range_slider(&mut commands, RangeSliderAxis::ZMax, DIM_Z as f32, DIM_Z as f32, "max");
+    let x_min = build_range_slider(
+        &mut commands,
+        RangeSliderAxis::XMin,
+        1.0,
+        DIM_X as f32,
+        1.0,
+        "min",
+    );
+    let x_max = build_range_slider(
+        &mut commands,
+        RangeSliderAxis::XMax,
+        1.0,
+        DIM_X as f32,
+        DIM_X as f32,
+        "max",
+    );
+    let y_min = build_range_slider(
+        &mut commands,
+        RangeSliderAxis::YMin,
+        1.0,
+        DIM_Y as f32,
+        1.0,
+        "min",
+    );
+    let y_max = build_range_slider(
+        &mut commands,
+        RangeSliderAxis::YMax,
+        1.0,
+        DIM_Y as f32,
+        DIM_Y as f32,
+        "max",
+    );
+    let z_min = build_range_slider(
+        &mut commands,
+        RangeSliderAxis::ZMin,
+        1.0,
+        DIM_Z as f32,
+        1.0,
+        "min",
+    );
+    let z_max = build_range_slider(
+        &mut commands,
+        RangeSliderAxis::ZMax,
+        1.0,
+        DIM_Z as f32,
+        DIM_Z as f32,
+        "max",
+    );
 
     let x_label = commands
-        .spawn((
+        .spawn(Node {
+            width: Val::Percent(100.0),
+            ..default()
+        })
+        .with_child((
             Text::new("X Axis"),
-            TextFont { font_size: 13.0, ..default() },
+            TextFont {
+                font_size: 13.0,
+                ..default()
+            },
             TextColor(Color::srgb(0.53, 0.76, 0.91)),
         ))
         .id();
     let y_label = commands
-        .spawn((
+        .spawn(Node {
+            width: Val::Percent(100.0),
+            ..default()
+        })
+        .with_child((
             Text::new("Y Axis"),
-            TextFont { font_size: 13.0, ..default() },
+            TextFont {
+                font_size: 13.0,
+                ..default()
+            },
             TextColor(Color::srgb(0.53, 0.76, 0.91)),
         ))
         .id();
     let z_label = commands
-        .spawn((
+        .spawn(Node {
+            width: Val::Percent(100.0),
+            ..default()
+        })
+        .with_child((
             Text::new("Z Axis"),
-            TextFont { font_size: 13.0, ..default() },
+            TextFont {
+                font_size: 13.0,
+                ..default()
+            },
             TextColor(Color::srgb(0.53, 0.76, 0.91)),
         ))
         .id();
     let count_text = commands
-        .spawn((
+        .spawn(Node {
+            width: Val::Percent(100.0),
+            ..default()
+        })
+        .with_child((
             Text::new("Showing -- cubes"),
-            TextFont { font_size: 12.0, ..default() },
+            TextFont {
+                font_size: 12.0,
+                ..default()
+            },
             TextColor(Color::srgb(0.4, 0.7, 0.4)),
             CubeCountText,
         ))
@@ -177,56 +249,57 @@ pub fn setup_ui(mut commands: Commands) {
             RangeSliderPanel,
         ))
         .add_children(&[
-            x_label, x_min, x_max,
-            y_label, y_min, y_max,
-            z_label, z_min, z_max,
-            count_text,
+            x_label, x_min, x_max, y_label, y_min, y_max, z_label, z_min, z_max, count_text,
         ]);
 
     // Coordinate display panel (bottom-right)
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            bottom: Val::Px(16.0),
-            right: Val::Px(16.0),
-            padding: UiRect::all(Val::Px(12.0)),
-            border_radius: BorderRadius::all(Val::Px(8.0)),
-            ..default()
-        },
-        BackgroundColor(BG_COLOR),
-    )).with_children(|parent| {
-        parent.spawn((
-            Text::new("--"),
-            TextFont {
-                font_size: 14.0,
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                bottom: Val::Px(16.0),
+                right: Val::Px(16.0),
+                padding: UiRect::all(Val::Px(12.0)),
+                border_radius: BorderRadius::all(Val::Px(8.0)),
                 ..default()
             },
-            TextColor(LABEL_COLOR),
-            HoverCoordsText,
-        ));
-    });
+            BackgroundColor(BG_COLOR),
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new("--"),
+                TextFont {
+                    font_size: 14.0,
+                    ..default()
+                },
+                TextColor(LABEL_COLOR),
+                HoverCoordsText,
+            ));
+        });
 
     // Floating tooltip (screen-space, follows hovered cube)
-    commands.spawn((
-        Node {
-            position_type: PositionType::Absolute,
-            padding: UiRect::all(Val::Px(4.0)),
-            border_radius: BorderRadius::all(Val::Px(4.0)),
-            ..default()
-        },
-        BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.85)),
-        Visibility::Hidden,
-        HoverTooltip,
-    )).with_children(|parent| {
-        parent.spawn((
-            Text::new(""),
-            TextFont {
-                font_size: 12.0,
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                padding: UiRect::all(Val::Px(4.0)),
+                border_radius: BorderRadius::all(Val::Px(4.0)),
                 ..default()
             },
-            TextColor(Color::srgb(1.0, 0.8, 0.0)),
-        ));
-    });
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.85)),
+            Visibility::Hidden,
+            HoverTooltip,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new(""),
+                TextFont {
+                    font_size: 12.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(1.0, 0.8, 0.0)),
+            ));
+        });
 }
 
 fn build_button_bar(commands: &mut Commands) -> Entity {
@@ -408,7 +481,8 @@ fn build_slider(commands: &mut Commands, axis: SliderAxis, max: f32, label: &str
 fn build_range_slider(
     commands: &mut Commands,
     axis: RangeSliderAxis,
-    max: f32,
+    range_start: f32,
+    range_end: f32,
     default_val: f32,
     label: &str,
 ) -> Entity {
@@ -504,7 +578,7 @@ fn build_range_slider(
                 track_click: TrackClick::Snap,
             },
             SliderValue(default_val),
-            SliderRange::new(0.0, max),
+            SliderRange::new(range_start, range_end),
             Hovered::default(),
             observe(slider_self_update),
         ))
@@ -526,7 +600,13 @@ fn build_range_slider(
 /// Updates slider thumb position and highlight.
 pub fn update_slider_visuals(
     sliders: Query<
-        (Entity, &SliderValue, &SliderRange, &Hovered, &CoreSliderDragState),
+        (
+            Entity,
+            &SliderValue,
+            &SliderRange,
+            &Hovered,
+            &CoreSliderDragState,
+        ),
         (
             Or<(
                 Changed<SliderValue>,
@@ -563,8 +643,14 @@ pub fn update_slider_visuals(
 
 /// Updates slider value text when slider value changes.
 pub fn update_value_labels(
-    sliders: Query<(&SliderValue, Option<&SliderAxis>, Option<&RangeSliderAxis>), (Changed<SliderValue>, With<CubeGridSlider>)>,
-    mut texts: Query<(&mut Text, Option<&SliderAxis>, Option<&RangeSliderAxis>), With<SliderValueText>>,
+    sliders: Query<
+        (&SliderValue, Option<&SliderAxis>, Option<&RangeSliderAxis>),
+        (Changed<SliderValue>, With<CubeGridSlider>),
+    >,
+    mut texts: Query<
+        (&mut Text, Option<&SliderAxis>, Option<&RangeSliderAxis>),
+        With<SliderValueText>,
+    >,
 ) {
     for (value, axis, range_axis) in sliders.iter() {
         if let Some(axis) = axis {
@@ -589,8 +675,13 @@ pub fn update_value_labels(
 }
 
 /// Syncs slider values into RangeSelectionState.
+/// Only writes when the u32 value actually changes, to avoid triggering
+/// expensive instance-buffer rebuilds on every drag frame.
 pub fn on_slider_changed(
-    sliders: Query<(&SliderValue, Option<&SliderAxis>, Option<&RangeSliderAxis>), Changed<SliderValue>>,
+    sliders: Query<
+        (&SliderValue, Option<&SliderAxis>, Option<&RangeSliderAxis>),
+        Changed<SliderValue>,
+    >,
     mut state: ResMut<RangeSelectionState>,
     mut ready: Local<bool>,
 ) {
@@ -602,53 +693,108 @@ pub fn on_slider_changed(
     for (value, axis, range_axis) in &sliders {
         let val = value.0 as u32;
         if let Some(axis) = axis {
-            match axis {
-                SliderAxis::X => state.x_slider = val,
-                SliderAxis::Y => state.y_slider = val,
-                SliderAxis::Z => state.z_slider = val,
+            let changed = match axis {
+                SliderAxis::X => {
+                    if state.x_slider != val {
+                        state.x_slider = val;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                SliderAxis::Y => {
+                    if state.y_slider != val {
+                        state.y_slider = val;
+                        true
+                    } else {
+                        false
+                    }
+                }
+                SliderAxis::Z => {
+                    if state.z_slider != val {
+                        state.z_slider = val;
+                        true
+                    } else {
+                        false
+                    }
+                }
+            };
+            if changed {
+                state.dirty = true;
             }
-            state.dirty = true;
         }
         if let Some(axis) = range_axis {
-            match axis {
+            let changed = match axis {
                 RangeSliderAxis::XMin => {
-                    state.x_min = val;
-                    if val > state.x_max {
-                        state.x_max = val;
+                    if state.x_min != val {
+                        state.x_min = val;
+                        if val > state.x_max {
+                            state.x_max = val;
+                        }
+                        true
+                    } else {
+                        false
                     }
                 }
                 RangeSliderAxis::XMax => {
-                    state.x_max = val;
-                    if val < state.x_min {
-                        state.x_min = val;
+                    if state.x_max != val {
+                        state.x_max = val;
+                        if val < state.x_min {
+                            state.x_min = val;
+                        }
+                        true
+                    } else {
+                        false
                     }
                 }
                 RangeSliderAxis::YMin => {
-                    state.y_min = val;
-                    if val > state.y_max {
-                        state.y_max = val;
+                    if state.y_min != val {
+                        state.y_min = val;
+                        if val > state.y_max {
+                            state.y_max = val;
+                        }
+                        true
+                    } else {
+                        false
                     }
                 }
                 RangeSliderAxis::YMax => {
-                    state.y_max = val;
-                    if val < state.y_min {
-                        state.y_min = val;
+                    if state.y_max != val {
+                        state.y_max = val;
+                        if val < state.y_min {
+                            state.y_min = val;
+                        }
+                        true
+                    } else {
+                        false
                     }
                 }
                 RangeSliderAxis::ZMin => {
-                    state.z_min = val;
-                    if val > state.z_max {
-                        state.z_max = val;
+                    if state.z_min != val {
+                        state.z_min = val;
+                        if val > state.z_max {
+                            state.z_max = val;
+                        }
+                        true
+                    } else {
+                        false
                     }
                 }
                 RangeSliderAxis::ZMax => {
-                    state.z_max = val;
-                    if val < state.z_min {
-                        state.z_min = val;
+                    if state.z_max != val {
+                        state.z_max = val;
+                        if val < state.z_min {
+                            state.z_min = val;
+                        }
+                        true
+                    } else {
+                        false
                     }
                 }
+            };
+            if changed {
+                state.dirty = true;
             }
-            state.dirty = true;
         }
     }
 }
@@ -698,7 +844,10 @@ pub fn update_button_visuals(
 pub fn on_mode_button_changed(
     mut interaction_query: Query<(&Interaction, &ModeButton), Changed<Interaction>>,
     mut state: ResMut<RangeSelectionState>,
-    mut panel_visibility: Query<(&mut Visibility, Has<SectionSliderPanel>), Or<(With<SectionSliderPanel>, With<RangeSliderPanel>)>>,
+    mut panel_visibility: Query<
+        (&mut Visibility, Has<SectionSliderPanel>),
+        Or<(With<SectionSliderPanel>, With<RangeSliderPanel>)>,
+    >,
     mut mode_btns: Query<(&ModeButton, &mut Text), With<Button>>,
     mut button_bar: Query<&mut Node, With<ButtonBarPanel>>,
 ) {
@@ -716,14 +865,28 @@ pub fn on_mode_button_changed(
         let is_section = new_mode == SelectionMode::Section;
         for (mut vis, is_section_panel) in &mut panel_visibility {
             *vis = if is_section_panel {
-                if is_section { Visibility::Visible } else { Visibility::Hidden }
+                if is_section {
+                    Visibility::Visible
+                } else {
+                    Visibility::Hidden
+                }
             } else {
-                if is_section { Visibility::Hidden } else { Visibility::Visible }
+                if is_section {
+                    Visibility::Hidden
+                } else {
+                    Visibility::Visible
+                }
             };
         }
 
         for mut node in &mut button_bar {
-            node.bottom = Val::Px(16.0 + if is_section { SECTION_PANEL_HEIGHT } else { RANGE_PANEL_HEIGHT });
+            node.bottom = Val::Px(
+                16.0 + if is_section {
+                    SECTION_PANEL_HEIGHT
+                } else {
+                    RANGE_PANEL_HEIGHT
+                },
+            );
         }
 
         for (_, mut text) in &mut mode_btns {
