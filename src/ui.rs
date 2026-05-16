@@ -67,7 +67,7 @@ pub(crate) struct ButtonBarPanel;
 pub(crate) struct HoverTooltip;
 
 const SECTION_PANEL_HEIGHT: f32 = 130.0;
-const RANGE_PANEL_HEIGHT: f32 = 220.0;
+const RANGE_PANEL_HEIGHT: f32 = 310.0;
 
 const SLIDER_TRACK_COLOR: Color = Color::srgb(0.1, 0.1, 0.12);
 const SLIDER_THUMB_COLOR: Color = Color::srgb(0.4, 0.7, 0.4);
