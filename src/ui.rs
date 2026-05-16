@@ -8,7 +8,7 @@ use bevy::{
 };
 
 use crate::camera::ViewMode;
-use crate::cube_grid::{compute_grid_position, CrossSectionState, DIM_X, DIM_Y, DIM_Z};
+use crate::cube_grid::{compute_grid_position, RangeSelectionState, SelectionMode, DIM_X, DIM_Y, DIM_Z};
 use crate::picking::PickingState;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
@@ -37,6 +37,28 @@ pub struct SliderValueText;
 
 #[derive(Component)]
 pub(crate) struct HoverCoordsText;
+
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+pub enum RangeSliderAxis {
+    XMin,
+    XMax,
+    YMin,
+    YMax,
+    ZMin,
+    ZMax,
+}
+
+#[derive(Component)]
+pub struct ModeButton;
+
+#[derive(Component)]
+pub struct SectionSliderPanel;
+
+#[derive(Component)]
+pub struct RangeSliderPanel;
+
+#[derive(Component)]
+pub struct CubeCountText;
 
 #[derive(Component)]
 pub(crate) struct HoverTooltip;
@@ -88,8 +110,70 @@ pub fn setup_ui(mut commands: Commands) {
                 ..default()
             },
             BackgroundColor(BG_COLOR),
+            SectionSliderPanel,
         ))
         .add_children(&[x_slider, y_slider, z_slider]);
+
+    // Range slider panel (hidden by default)
+    let x_min = build_range_slider(&mut commands, RangeSliderAxis::XMin, DIM_X as f32, 0.0, "min");
+    let x_max = build_range_slider(&mut commands, RangeSliderAxis::XMax, DIM_X as f32, DIM_X as f32, "max");
+    let y_min = build_range_slider(&mut commands, RangeSliderAxis::YMin, DIM_Y as f32, 0.0, "min");
+    let y_max = build_range_slider(&mut commands, RangeSliderAxis::YMax, DIM_Y as f32, DIM_Y as f32, "max");
+    let z_min = build_range_slider(&mut commands, RangeSliderAxis::ZMin, DIM_Z as f32, 0.0, "min");
+    let z_max = build_range_slider(&mut commands, RangeSliderAxis::ZMax, DIM_Z as f32, DIM_Z as f32, "max");
+
+    let x_label = commands
+        .spawn((
+            Text::new("X 轴"),
+            TextFont { font_size: 13.0, ..default() },
+            TextColor(Color::srgb(0.53, 0.76, 0.91)),
+        ))
+        .id();
+    let y_label = commands
+        .spawn((
+            Text::new("Y 轴"),
+            TextFont { font_size: 13.0, ..default() },
+            TextColor(Color::srgb(0.53, 0.76, 0.91)),
+        ))
+        .id();
+    let z_label = commands
+        .spawn((
+            Text::new("Z 轴"),
+            TextFont { font_size: 13.0, ..default() },
+            TextColor(Color::srgb(0.53, 0.76, 0.91)),
+        ))
+        .id();
+    let count_text = commands
+        .spawn((
+            Text::new("显示 -- 方块"),
+            TextFont { font_size: 12.0, ..default() },
+            TextColor(Color::srgb(0.4, 0.7, 0.4)),
+            CubeCountText,
+        ))
+        .id();
+
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                bottom: Val::Px(16.0),
+                left: Val::Px(16.0),
+                flex_direction: FlexDirection::Column,
+                row_gap: Val::Px(4.0),
+                padding: UiRect::all(Val::Px(12.0)),
+                border_radius: BorderRadius::all(Val::Px(8.0)),
+                ..default()
+            },
+            BackgroundColor(BG_COLOR),
+            Visibility::Hidden,
+            RangeSliderPanel,
+        ))
+        .add_children(&[
+            x_label, x_min, x_max,
+            y_label, y_min, y_max,
+            z_label, z_min, z_max,
+            count_text,
+        ]);
 
     // Coordinate display panel (bottom-right)
     commands.spawn((
@@ -175,6 +259,26 @@ fn build_button_bar(commands: &mut Commands) -> Entity {
             .id();
         commands.entity(row).add_child(btn);
     }
+
+    let mode_btn = commands
+        .spawn((
+            Button,
+            Node {
+                padding: UiRect::all(Val::Px(6.0)),
+                border_radius: BorderRadius::all(Val::Px(4.0)),
+                ..default()
+            },
+            BackgroundColor(BTN_INACTIVE_COLOR),
+            ModeButton,
+            Text::new("范围模式"),
+            TextFont {
+                font_size: 13.0,
+                ..default()
+            },
+            TextColor(Color::srgb(0.85, 0.85, 0.85)),
+        ))
+        .id();
+    commands.entity(row).add_child(mode_btn);
 
     row
 }
@@ -291,6 +395,124 @@ fn build_slider(commands: &mut Commands, axis: SliderAxis, max: f32, label: &str
         .id();
 
     row
+}
+
+fn build_range_slider(
+    commands: &mut Commands,
+    axis: RangeSliderAxis,
+    max: f32,
+    default_val: f32,
+    label: &str,
+) -> Entity {
+    let axis_label = commands
+        .spawn((
+            Text::new(label.to_string()),
+            TextFont {
+                font_size: 11.0,
+                ..default()
+            },
+            TextColor(LABEL_COLOR),
+        ))
+        .id();
+
+    let value_text = commands
+        .spawn((
+            Text::new(format!("{:.0}", default_val)),
+            TextFont {
+                font_size: 11.0,
+                ..default()
+            },
+            TextColor(LABEL_COLOR),
+            axis,
+            SliderValueText,
+        ))
+        .id();
+
+    let label_row = commands
+        .spawn(Node {
+            display: Display::Flex,
+            flex_direction: FlexDirection::Row,
+            justify_content: JustifyContent::SpaceBetween,
+            ..default()
+        })
+        .add_children(&[axis_label, value_text])
+        .id();
+
+    let track = commands
+        .spawn((
+            Node {
+                height: Val::Px(6.0),
+                border_radius: BorderRadius::all(Val::Px(3.0)),
+                ..default()
+            },
+            BackgroundColor(SLIDER_TRACK_COLOR),
+        ))
+        .id();
+
+    let thumb = commands
+        .spawn((
+            CubeGridSliderThumb,
+            SliderThumb,
+            Node {
+                display: Display::Flex,
+                width: Val::Px(12.0),
+                height: Val::Px(16.0),
+                position_type: PositionType::Absolute,
+                left: Val::Percent(0.0),
+                border_radius: BorderRadius::all(Val::Px(3.0)),
+                ..default()
+            },
+            BackgroundColor(SLIDER_THUMB_COLOR),
+        ))
+        .id();
+
+    let thumb_wrapper = commands
+        .spawn(Node {
+            display: Display::Flex,
+            position_type: PositionType::Absolute,
+            left: Val::Px(0.0),
+            right: Val::Px(12.0),
+            top: Val::Px(0.0),
+            bottom: Val::Px(0.0),
+            ..default()
+        })
+        .add_child(thumb)
+        .id();
+
+    let slider = commands
+        .spawn((
+            Node {
+                display: Display::Flex,
+                flex_direction: FlexDirection::Column,
+                justify_content: JustifyContent::Center,
+                align_items: AlignItems::Stretch,
+                height: Val::Px(16.0),
+                width: Val::Percent(100.0),
+                ..default()
+            },
+            CubeGridSlider,
+            axis,
+            Slider {
+                track_click: TrackClick::Snap,
+            },
+            SliderValue(default_val),
+            SliderRange::new(0.0, max),
+            Hovered::default(),
+            observe(slider_self_update),
+        ))
+        .add_children(&[track, thumb_wrapper])
+        .id();
+
+    commands
+        .spawn(Node {
+            display: Display::Flex,
+            flex_direction: FlexDirection::Column,
+            row_gap: Val::Px(1.0),
+            width: Val::Px(560.0),
+            ..default()
+        })
+        .add_children(&[label_row, slider])
+        .id()
 }
 
 /// Updates slider thumb position and highlight.
