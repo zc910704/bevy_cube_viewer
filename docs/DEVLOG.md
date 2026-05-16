@@ -148,3 +148,92 @@ gz = (pos.y / cube_spacing + (DIM_Z - 1) / 2).round()  // world Y → grid Z
 **问题**: 进入剖面模式时，`section_target` 应从 Vec3::ZERO 开始，而非保留上次剖面模式的偏移位置。
 
 **解决**: 每次切换到剖面模式时将 `camera_state.section_target = Vec3::ZERO`。
+
+---
+
+## 范围选择功能 — B0001 Query 冲突
+
+### 现象
+
+添加范围选择功能（6 个范围滑块 + 模式切换按钮）后，应用启动即崩溃：
+
+```
+error[B0001]: Query<..., ...> in system <...> accesses component(s) <...>
+in a way that conflicts with a previous system parameter.
+```
+
+崩溃发生在 `Update` schedule 内。
+
+### 排查思路
+
+1. **定位 schedule**: 从 backtrace 确认 panic 在 `Update` schedule 的 `schedule()` 调用中，缩小范围为 Update 系统的某个。
+
+2. **缩小嫌疑人**: 新增/修改的系统有 7 个。先检查有多个 `Query` 参数的系统（B0001 本质是同一系统内两个 Query 访问了相同组件类型）。
+
+3. **启用 trace feature**: `cargo run --features bevy/trace` 尝试获取系统名，但 trace feature 不足够，系统名仍显示为 `<Enable the debug feature to see the name>`。
+
+4. **逐个检查**: 手动审查每个系统的 Query 参数，找出访问重叠组件的。
+
+### 根因
+
+Bevy 的 ECS 调度器在系统初始化时验证所有 Query 的组件访问是否兼容。**同一系统内两个 Query 访问相同组件类型即触发 B0001，即使两个都是只读（`&T`）访问也触发。** 这是因为使用了 `Changed<T>` filter 时内部会访问 `ChangeTrackers<T>`，Bevy 将两个 Query 访问同一组件类型的 change tracker 视为冲突。
+
+涉及 3 个系统的 3 类冲突：
+
+| 系统 | 冲突组件 | 原因 |
+|------|----------|------|
+| `on_slider_changed` | `SliderValue` | 两个 Query 都 `&SliderValue` + `Changed<SliderValue>` |
+| `update_value_labels` | `SliderValue`, `Text` | 两个 slider Query 都访问 `SliderValue`；两个 text Query 都 `&mut Text` |
+| `on_mode_button_changed` | `Visibility` | 两个 Query 都 `&mut Visibility` |
+
+### 解决方法
+
+**方法 A: `Option<>` 合并** — 当两个 Query 访问同一组件但用不同标记组件区分时：
+
+```rust
+// ❌ 错误: 两个 Query 都访问 SliderValue
+section_sliders: Query<(&SliderValue, &SliderAxis), Changed<SliderValue>>,
+range_sliders: Query<(&SliderValue, &RangeSliderAxis), Changed<SliderValue>>,
+
+// ✅ 正确: 合并为一个，用 Option<> 替代标记组件
+sliders: Query<(
+    &SliderValue,
+    Option<&SliderAxis>,
+    Option<&RangeSliderAxis>,
+), Changed<SliderValue>>,
+```
+
+```rust
+// ❌ 错误: 两个 Query 都 &mut Text
+mut texts: Query<(&mut Text, &SliderAxis), With<SliderValueText>>,
+mut range_texts: Query<(&mut Text, &RangeSliderAxis), With<SliderValueText>>,
+
+// ✅ 正确: 合并为 Option<>
+mut texts: Query<(
+    &mut Text,
+    Option<&SliderAxis>,
+    Option<&RangeSliderAxis>,
+), With<SliderValueText>>,
+```
+
+**方法 B: `Has<>` 合并** — 当两个 Query 用 `With<A>` / `With<B>` 区分时：
+
+```rust
+// ❌ 错误: 两个 Query 都 &mut Visibility
+mut section_panel: Query<&mut Visibility, (With<SectionSliderPanel>, Without<RangeSliderPanel>)>,
+mut range_panel: Query<&mut Visibility, (With<RangeSliderPanel>, Without<SectionSliderPanel>)>,
+
+// ✅ 正确: 合并为一个，用 Has<> 在循环内分支
+mut panel_visibility: Query<(&mut Visibility, Has<SectionSliderPanel>)>,
+// 循环内:
+for (mut vis, is_section_panel) in &mut panel_visibility {
+    *vis = if is_section_panel { Visibility::Visible } else { Visibility::Hidden };
+}
+```
+
+### 关键要点
+
+- B0001 是**编译期验证**但**运行时 panic**（Bevy 在系统初始化时检查，在第一次 schedule 执行时 panic）
+- 两个 Query 即使都只读访问同一组件，只要有一个用了 `Changed<T>` filter，就会冲突
+- 合并后逻辑更简洁：以前两个循环分别处理 section 和 range，现在一个循环内按 `Option<>` 分支
+- `Has<T>` 比 `Option<&T>` 更高效（不需要实际读取组件数据），当只需要判断组件存在性时使用 `Has<T>`

@@ -555,22 +555,26 @@ pub fn update_slider_visuals(
 
 /// Updates slider value text when slider value changes.
 pub fn update_value_labels(
-    section_sliders: Query<(&SliderValue, &SliderAxis), (Changed<SliderValue>, With<CubeGridSlider>)>,
-    range_sliders: Query<(&SliderValue, &RangeSliderAxis), (Changed<SliderValue>, With<CubeGridSlider>)>,
-    mut texts: Query<(&mut Text, &SliderAxis), With<SliderValueText>>,
-    mut range_texts: Query<(&mut Text, &RangeSliderAxis), With<SliderValueText>>,
+    sliders: Query<(&SliderValue, Option<&SliderAxis>, Option<&RangeSliderAxis>), (Changed<SliderValue>, With<CubeGridSlider>)>,
+    mut texts: Query<(&mut Text, Option<&SliderAxis>, Option<&RangeSliderAxis>), With<SliderValueText>>,
 ) {
-    for (value, axis) in section_sliders.iter() {
-        for (mut text, txt_axis) in texts.iter_mut() {
-            if axis == txt_axis {
-                **text = format!("{:.0}", value.0);
+    for (value, axis, range_axis) in sliders.iter() {
+        if let Some(axis) = axis {
+            for (mut text, txt_axis, _) in texts.iter_mut() {
+                if let Some(txt_axis) = txt_axis {
+                    if axis == txt_axis {
+                        **text = format!("{:.0}", value.0);
+                    }
+                }
             }
         }
-    }
-    for (value, axis) in range_sliders.iter() {
-        for (mut text, txt_axis) in range_texts.iter_mut() {
-            if axis == txt_axis {
-                **text = format!("{:.0}", value.0);
+        if let Some(axis) = range_axis {
+            for (mut text, _, txt_axis) in texts.iter_mut() {
+                if let Some(txt_axis) = txt_axis {
+                    if axis == txt_axis {
+                        **text = format!("{:.0}", value.0);
+                    }
+                }
             }
         }
     }
@@ -578,8 +582,7 @@ pub fn update_value_labels(
 
 /// Syncs slider values into RangeSelectionState.
 pub fn on_slider_changed(
-    section_sliders: Query<(&SliderValue, &SliderAxis), Changed<SliderValue>>,
-    range_sliders: Query<(&SliderValue, &RangeSliderAxis), Changed<SliderValue>>,
+    sliders: Query<(&SliderValue, Option<&SliderAxis>, Option<&RangeSliderAxis>), Changed<SliderValue>>,
     mut state: ResMut<RangeSelectionState>,
     mut ready: Local<bool>,
 ) {
@@ -588,57 +591,57 @@ pub fn on_slider_changed(
         return;
     }
 
-    for (value, axis) in &section_sliders {
+    for (value, axis, range_axis) in &sliders {
         let val = value.0 as u32;
-        match axis {
-            SliderAxis::X => state.x_slider = val,
-            SliderAxis::Y => state.y_slider = val,
-            SliderAxis::Z => state.z_slider = val,
-        }
-        state.dirty = true;
-    }
-
-    for (value, axis) in &range_sliders {
-        let val = value.0 as u32;
-        match axis {
-            RangeSliderAxis::XMin => {
-                state.x_min = val;
-                if val > state.x_max {
-                    state.x_max = val;
-                }
+        if let Some(axis) = axis {
+            match axis {
+                SliderAxis::X => state.x_slider = val,
+                SliderAxis::Y => state.y_slider = val,
+                SliderAxis::Z => state.z_slider = val,
             }
-            RangeSliderAxis::XMax => {
-                state.x_max = val;
-                if val < state.x_min {
+            state.dirty = true;
+        }
+        if let Some(axis) = range_axis {
+            match axis {
+                RangeSliderAxis::XMin => {
                     state.x_min = val;
+                    if val > state.x_max {
+                        state.x_max = val;
+                    }
                 }
-            }
-            RangeSliderAxis::YMin => {
-                state.y_min = val;
-                if val > state.y_max {
-                    state.y_max = val;
+                RangeSliderAxis::XMax => {
+                    state.x_max = val;
+                    if val < state.x_min {
+                        state.x_min = val;
+                    }
                 }
-            }
-            RangeSliderAxis::YMax => {
-                state.y_max = val;
-                if val < state.y_min {
+                RangeSliderAxis::YMin => {
                     state.y_min = val;
+                    if val > state.y_max {
+                        state.y_max = val;
+                    }
                 }
-            }
-            RangeSliderAxis::ZMin => {
-                state.z_min = val;
-                if val > state.z_max {
-                    state.z_max = val;
+                RangeSliderAxis::YMax => {
+                    state.y_max = val;
+                    if val < state.y_min {
+                        state.y_min = val;
+                    }
                 }
-            }
-            RangeSliderAxis::ZMax => {
-                state.z_max = val;
-                if val < state.z_min {
+                RangeSliderAxis::ZMin => {
                     state.z_min = val;
+                    if val > state.z_max {
+                        state.z_max = val;
+                    }
+                }
+                RangeSliderAxis::ZMax => {
+                    state.z_max = val;
+                    if val < state.z_min {
+                        state.z_min = val;
+                    }
                 }
             }
+            state.dirty = true;
         }
-        state.dirty = true;
     }
 }
 
@@ -687,8 +690,7 @@ pub fn update_button_visuals(
 pub fn on_mode_button_changed(
     mut interaction_query: Query<(&Interaction, &ModeButton), Changed<Interaction>>,
     mut state: ResMut<RangeSelectionState>,
-    mut section_panel: Query<&mut Visibility, (With<SectionSliderPanel>, Without<RangeSliderPanel>)>,
-    mut range_panel: Query<&mut Visibility, (With<RangeSliderPanel>, Without<SectionSliderPanel>)>,
+    mut panel_visibility: Query<(&mut Visibility, Has<SectionSliderPanel>)>,
     mut mode_btns: Query<(&ModeButton, &mut Text), With<Button>>,
 ) {
     for (interaction, _) in &mut interaction_query {
@@ -703,18 +705,13 @@ pub fn on_mode_button_changed(
         state.dirty = true;
 
         let is_section = new_mode == SelectionMode::Section;
-        for mut vis in &mut section_panel {
-            *vis = if is_section {
-                Visibility::Visible
+        for (mut vis, is_section_panel) in &mut panel_visibility {
+            *vis = if is_section_panel {
+                // Section panel: visible when section mode
+                if is_section { Visibility::Visible } else { Visibility::Hidden }
             } else {
-                Visibility::Hidden
-            };
-        }
-        for mut vis in &mut range_panel {
-            *vis = if is_section {
-                Visibility::Hidden
-            } else {
-                Visibility::Visible
+                // Range panel: visible when range mode
+                if is_section { Visibility::Hidden } else { Visibility::Visible }
             };
         }
 
