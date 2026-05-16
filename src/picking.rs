@@ -108,24 +108,24 @@ fn dda_traverse(
         if t_max_x <= t_max_y && t_max_x <= t_max_z {
             if step_x > 0 {
                 if grid.0 + 1 >= DIM_X { return None; }
-            } else {
-                if grid.0 == 0 { return None; }
+            } else if grid.0 == 0 {
+                return None;
             }
             grid.0 = (grid.0 as isize + step_x) as usize;
             t_max_x += t_delta_x;
         } else if t_max_y <= t_max_z {
             if step_y > 0 {
                 if grid.1 + 1 >= DIM_Y { return None; }
-            } else {
-                if grid.1 == 0 { return None; }
+            } else if grid.1 == 0 {
+                return None;
             }
             grid.1 = (grid.1 as isize + step_y) as usize;
             t_max_y += t_delta_y;
         } else {
             if step_z > 0 {
                 if grid.2 + 1 >= DIM_Z { return None; }
-            } else {
-                if grid.2 == 0 { return None; }
+            } else if grid.2 == 0 {
+                return None;
             }
             grid.2 = (grid.2 as isize + step_z) as usize;
             t_max_z += t_delta_z;
