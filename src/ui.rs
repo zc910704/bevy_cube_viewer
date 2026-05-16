@@ -124,28 +124,28 @@ pub fn setup_ui(mut commands: Commands) {
 
     let x_label = commands
         .spawn((
-            Text::new("X 轴"),
+            Text::new("X Axis"),
             TextFont { font_size: 13.0, ..default() },
             TextColor(Color::srgb(0.53, 0.76, 0.91)),
         ))
         .id();
     let y_label = commands
         .spawn((
-            Text::new("Y 轴"),
+            Text::new("Y Axis"),
             TextFont { font_size: 13.0, ..default() },
             TextColor(Color::srgb(0.53, 0.76, 0.91)),
         ))
         .id();
     let z_label = commands
         .spawn((
-            Text::new("Z 轴"),
+            Text::new("Z Axis"),
             TextFont { font_size: 13.0, ..default() },
             TextColor(Color::srgb(0.53, 0.76, 0.91)),
         ))
         .id();
     let count_text = commands
         .spawn((
-            Text::new("显示 -- 方块"),
+            Text::new("Showing -- cubes"),
             TextFont { font_size: 12.0, ..default() },
             TextColor(Color::srgb(0.4, 0.7, 0.4)),
             CubeCountText,
@@ -233,9 +233,9 @@ fn build_button_bar(commands: &mut Commands) -> Entity {
 
     let buttons = [
         (ViewButtonAxis::ThreeD, "3D"),
-        (ViewButtonAxis::X, "X 剖面"),
-        (ViewButtonAxis::Y, "Y 剖面"),
-        (ViewButtonAxis::Z, "Z 剖面"),
+        (ViewButtonAxis::X, "X Section"),
+        (ViewButtonAxis::Y, "Y Section"),
+        (ViewButtonAxis::Z, "Z Section"),
     ];
 
     for (axis, label) in buttons {
@@ -270,7 +270,7 @@ fn build_button_bar(commands: &mut Commands) -> Entity {
             },
             BackgroundColor(BTN_INACTIVE_COLOR),
             ModeButton,
-            Text::new("范围模式"),
+            Text::new("Range Mode"),
             TextFont {
                 font_size: 13.0,
                 ..default()
@@ -286,7 +286,7 @@ fn build_button_bar(commands: &mut Commands) -> Entity {
 fn build_slider(commands: &mut Commands, axis: SliderAxis, max: f32, label: &str) -> Entity {
     let axis_label = commands
         .spawn((
-            Text::new(format!("{} 轴", label)),
+            Text::new(format!("{} Axis", label)),
             TextFont {
                 font_size: 14.0,
                 ..default()
@@ -717,9 +717,9 @@ pub fn on_mode_button_changed(
 
         for (_, mut text) in &mut mode_btns {
             **text = if is_section {
-                "范围模式".into()
+                "Range Mode".into()
             } else {
-                "截面模式".into()
+                "Section Mode".into()
             };
         }
     }
@@ -751,7 +751,7 @@ pub fn update_cube_count(
                 (x_hi - x_lo + 1) * (y_hi - y_lo + 1) * (z_hi - z_lo + 1)
             }
         };
-        **text = format!("显示 {} 方块", count);
+        **text = format!("Showing {} cubes", count);
     }
 }
 
