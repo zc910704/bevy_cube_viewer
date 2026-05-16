@@ -160,11 +160,9 @@ Line 138-150: `is_visible` 改为接受 `RangeSelectionState`，按 mode 分支�
 fn is_visible(x: usize, y: usize, z: usize, state: &RangeSelectionState) -> bool {
     match state.mode {
         SelectionMode::Section => {
-            state.x_slider == 0 || x == (state.x_slider - 1) as usize
-        } && {
-            state.y_slider == 0 || y == (state.y_slider - 1) as usize
-        } && {
-            state.z_slider == 0 || z == (state.z_slider - 1) as usize
+            (state.x_slider == 0 || x == (state.x_slider - 1) as usize)
+            && (state.y_slider == 0 || y == (state.y_slider - 1) as usize)
+            && (state.z_slider == 0 || z == (state.z_slider - 1) as usize)
         }
         SelectionMode::Range => {
             let x_lo = state.x_min.saturating_sub(1) as usize;
