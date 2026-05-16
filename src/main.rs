@@ -10,7 +10,8 @@ use bevy::input_focus::{
     InputDispatchPlugin,
 };
 use bevy_dev_tools::fps_overlay::FpsOverlayPlugin;
-use bevy::ui_widgets::{UiWidgetsPlugins, SliderValue};
+use bevy::ui_widgets::{UiWidgetsPlugins, SliderValue, SetChecked};
+use bevy::ui::Checked;
 
 use camera::{CameraState, ViewMode, orbit_camera};
 use cube_grid::{CubeGrid, RangeSelectionState, SelectionMode, DIM_X, DIM_Y, DIM_Z};
@@ -20,6 +21,7 @@ use ui::{
     on_view_button_changed, on_mode_button_changed, update_button_visuals,
     update_hover_coords_panel, update_hover_tooltip,
     update_cube_count, sync_range_sliders,
+    FailBitCheckbox, on_failbit_changed,
 };
 
 fn main() {
@@ -53,6 +55,7 @@ fn main() {
         .add_systems(Update, update_hover_coords_panel)
         .add_systems(Update, update_hover_tooltip)
         .add_systems(Update, handle_esc)
+        .add_observer(on_failbit_changed)
         .run();
 }
 
@@ -70,6 +73,7 @@ fn handle_esc(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut state: ResMut<RangeSelectionState>,
     section_sliders: Query<Entity, (With<CubeGridSlider>, With<crate::ui::SliderAxis>)>,
+    checkbox: Query<(Entity, Has<Checked>), With<FailBitCheckbox>>,
     mut commands: Commands,
 ) {
     if keyboard.just_pressed(KeyCode::Escape) {
@@ -78,6 +82,7 @@ fn handle_esc(
                 state.x_slider = 0;
                 state.y_slider = 0;
                 state.z_slider = 0;
+                state.only_failbit = false;
             }
             SelectionMode::Range => {
                 state.x_min = 1;
@@ -86,6 +91,7 @@ fn handle_esc(
                 state.y_max = DIM_Y as u32;
                 state.z_min = 1;
                 state.z_max = DIM_Z as u32;
+                state.only_failbit = false;
             }
         }
         state.dirty = true;
@@ -93,6 +99,15 @@ fn handle_esc(
         // Section sliders reset to 0 (show all); range sliders synced by sync_range_sliders.
         for entity in &section_sliders {
             commands.entity(entity).insert(SliderValue(0.0));
+        }
+
+        if let Ok((entity, is_checked)) = checkbox.single() {
+            if is_checked {
+                commands.trigger(SetChecked {
+                    entity,
+                    checked: false,
+                });
+            }
         }
     }
 }
