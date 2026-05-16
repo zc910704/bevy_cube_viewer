@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::cube_grid::{
-    CrossSectionState, DIM_X, DIM_Y, DIM_Z, CUBE_SPACING,
+    RangeSelectionState, SelectionMode, DIM_X, DIM_Y, DIM_Z, CUBE_SPACING,
 };
 
 /// Current hover target in grid coordinates.
@@ -55,7 +55,7 @@ fn world_to_grid(world: Vec3) -> Option<(usize, usize, usize)> {
 fn dda_traverse(
     origin: Vec3,
     dir: Vec3,
-    cross_section: &CrossSectionState,
+    state: &RangeSelectionState,
 ) -> Option<(usize, usize, usize)> {
     let (aabb_min, aabb_max) = grid_aabb();
     let dir_inv = Vec3::new(1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z);
@@ -100,7 +100,7 @@ fn dda_traverse(
         }
 
         // Visibility check against cross-section state
-        if is_visible(grid.0, grid.1, grid.2, cross_section) {
+        if is_visible(grid.0, grid.1, grid.2, state) {
             return Some(grid);
         }
 
@@ -136,17 +136,23 @@ fn dda_traverse(
 }
 
 /// Check if a grid cell passes the cross-section filter.
-fn is_visible(x: usize, y: usize, z: usize, state: &CrossSectionState) -> bool {
-    if state.x_slider != 0 && x != (state.x_slider - 1) as usize {
-        return false;
+fn is_visible(x: usize, y: usize, z: usize, state: &RangeSelectionState) -> bool {
+    match state.mode {
+        SelectionMode::Section => {
+            (state.x_slider == 0 || x == (state.x_slider - 1) as usize)
+            && (state.y_slider == 0 || y == (state.y_slider - 1) as usize)
+            && (state.z_slider == 0 || z == (state.z_slider - 1) as usize)
+        }
+        SelectionMode::Range => {
+            let x_lo = state.x_min.saturating_sub(1) as usize;
+            let x_hi = state.x_max.min(DIM_X as u32).saturating_sub(1) as usize;
+            let y_lo = state.y_min.saturating_sub(1) as usize;
+            let y_hi = state.y_max.min(DIM_Y as u32).saturating_sub(1) as usize;
+            let z_lo = state.z_min.saturating_sub(1) as usize;
+            let z_hi = state.z_max.min(DIM_Z as u32).saturating_sub(1) as usize;
+            x >= x_lo && x <= x_hi && y >= y_lo && y <= y_hi && z >= z_lo && z <= z_hi
+        }
     }
-    if state.y_slider != 0 && y != (state.y_slider - 1) as usize {
-        return false;
-    }
-    if state.z_slider != 0 && z != (state.z_slider - 1) as usize {
-        return false;
-    }
-    true
 }
 
 /// Runs each frame: casts a ray from the camera through the cursor,
@@ -154,7 +160,7 @@ fn is_visible(x: usize, y: usize, z: usize, state: &CrossSectionState) -> bool {
 pub fn picking_system(
     camera: Single<(&Camera, &GlobalTransform)>,
     windows: Query<&Window>,
-    cross_section: Res<CrossSectionState>,
+    cross_section: Res<RangeSelectionState>,
     mut picking: ResMut<PickingState>,
 ) {
     let Ok(window) = windows.single() else {
