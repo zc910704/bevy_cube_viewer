@@ -110,6 +110,7 @@ pub fn setup_ui(mut commands: Commands) {
                 ..default()
             },
             BackgroundColor(BG_COLOR),
+            Visibility::Visible,
             SectionSliderPanel,
         ))
         .add_children(&[x_slider, y_slider, z_slider]);
@@ -690,7 +691,7 @@ pub fn update_button_visuals(
 pub fn on_mode_button_changed(
     mut interaction_query: Query<(&Interaction, &ModeButton), Changed<Interaction>>,
     mut state: ResMut<RangeSelectionState>,
-    mut panel_visibility: Query<(&mut Visibility, Has<SectionSliderPanel>)>,
+    mut panel_visibility: Query<(&mut Visibility, Has<SectionSliderPanel>), Or<(With<SectionSliderPanel>, With<RangeSliderPanel>)>>,
     mut mode_btns: Query<(&ModeButton, &mut Text), With<Button>>,
 ) {
     for (interaction, _) in &mut interaction_query {
