@@ -555,11 +555,20 @@ pub fn update_slider_visuals(
 
 /// Updates slider value text when slider value changes.
 pub fn update_value_labels(
-    sliders: Query<(&SliderValue, &SliderAxis), (Changed<SliderValue>, With<CubeGridSlider>)>,
+    section_sliders: Query<(&SliderValue, &SliderAxis), (Changed<SliderValue>, With<CubeGridSlider>)>,
+    range_sliders: Query<(&SliderValue, &RangeSliderAxis), (Changed<SliderValue>, With<CubeGridSlider>)>,
     mut texts: Query<(&mut Text, &SliderAxis), With<SliderValueText>>,
+    mut range_texts: Query<(&mut Text, &RangeSliderAxis), With<SliderValueText>>,
 ) {
-    for (value, axis) in sliders.iter() {
+    for (value, axis) in section_sliders.iter() {
         for (mut text, txt_axis) in texts.iter_mut() {
+            if axis == txt_axis {
+                **text = format!("{:.0}", value.0);
+            }
+        }
+    }
+    for (value, axis) in range_sliders.iter() {
+        for (mut text, txt_axis) in range_texts.iter_mut() {
             if axis == txt_axis {
                 **text = format!("{:.0}", value.0);
             }
@@ -567,26 +576,69 @@ pub fn update_value_labels(
     }
 }
 
-/// Syncs slider values into CrossSectionState.
+/// Syncs slider values into RangeSelectionState.
 pub fn on_slider_changed(
-    sliders: Query<(&SliderValue, &SliderAxis), Changed<SliderValue>>,
-    mut cross_section: ResMut<CrossSectionState>,
+    section_sliders: Query<(&SliderValue, &SliderAxis), Changed<SliderValue>>,
+    range_sliders: Query<(&SliderValue, &RangeSliderAxis), Changed<SliderValue>>,
+    mut state: ResMut<RangeSelectionState>,
     mut ready: Local<bool>,
 ) {
-    // Skip the first trigger — bevy_ui_widgets may fire Changed<SliderValue>
-    // during initialization before the user has touched any slider.
     if !*ready {
         *ready = true;
         return;
     }
-    for (value, axis) in &sliders {
+
+    for (value, axis) in &section_sliders {
         let val = value.0 as u32;
         match axis {
-            SliderAxis::X => cross_section.x_slider = val,
-            SliderAxis::Y => cross_section.y_slider = val,
-            SliderAxis::Z => cross_section.z_slider = val,
+            SliderAxis::X => state.x_slider = val,
+            SliderAxis::Y => state.y_slider = val,
+            SliderAxis::Z => state.z_slider = val,
         }
-        cross_section.dirty = true;
+        state.dirty = true;
+    }
+
+    for (value, axis) in &range_sliders {
+        let val = value.0 as u32;
+        match axis {
+            RangeSliderAxis::XMin => {
+                state.x_min = val;
+                if val > state.x_max {
+                    state.x_max = val;
+                }
+            }
+            RangeSliderAxis::XMax => {
+                state.x_max = val;
+                if val < state.x_min {
+                    state.x_min = val;
+                }
+            }
+            RangeSliderAxis::YMin => {
+                state.y_min = val;
+                if val > state.y_max {
+                    state.y_max = val;
+                }
+            }
+            RangeSliderAxis::YMax => {
+                state.y_max = val;
+                if val < state.y_min {
+                    state.y_min = val;
+                }
+            }
+            RangeSliderAxis::ZMin => {
+                state.z_min = val;
+                if val > state.z_max {
+                    state.z_max = val;
+                }
+            }
+            RangeSliderAxis::ZMax => {
+                state.z_max = val;
+                if val < state.z_min {
+                    state.z_min = val;
+                }
+            }
+        }
+        state.dirty = true;
     }
 }
 
@@ -628,6 +680,105 @@ pub fn update_button_visuals(
         } else {
             BTN_INACTIVE_COLOR
         };
+    }
+}
+
+/// Toggles between Section and Range modes when mode button is pressed.
+pub fn on_mode_button_changed(
+    mut interaction_query: Query<(&Interaction, &ModeButton), Changed<Interaction>>,
+    mut state: ResMut<RangeSelectionState>,
+    mut section_panel: Query<&mut Visibility, (With<SectionSliderPanel>, Without<RangeSliderPanel>)>,
+    mut range_panel: Query<&mut Visibility, (With<RangeSliderPanel>, Without<SectionSliderPanel>)>,
+    mut mode_btns: Query<(&ModeButton, &mut Text), With<Button>>,
+) {
+    for (interaction, _) in &mut interaction_query {
+        if *interaction != Interaction::Pressed {
+            continue;
+        }
+        let new_mode = match state.mode {
+            SelectionMode::Section => SelectionMode::Range,
+            SelectionMode::Range => SelectionMode::Section,
+        };
+        state.mode = new_mode;
+        state.dirty = true;
+
+        let is_section = new_mode == SelectionMode::Section;
+        for mut vis in &mut section_panel {
+            *vis = if is_section {
+                Visibility::Visible
+            } else {
+                Visibility::Hidden
+            };
+        }
+        for mut vis in &mut range_panel {
+            *vis = if is_section {
+                Visibility::Hidden
+            } else {
+                Visibility::Visible
+            };
+        }
+
+        for (_, mut text) in &mut mode_btns {
+            **text = if is_section {
+                "范围模式".into()
+            } else {
+                "截面模式".into()
+            };
+        }
+    }
+}
+
+/// Updates the cube count text when state changes.
+pub fn update_cube_count(
+    state: Res<RangeSelectionState>,
+    mut texts: Query<&mut Text, With<CubeCountText>>,
+) {
+    if !state.is_changed() {
+        return;
+    }
+    for mut text in &mut texts {
+        let count = match state.mode {
+            SelectionMode::Section => {
+                let xc = if state.x_slider == 0 { DIM_X } else { 1 };
+                let yc = if state.y_slider == 0 { DIM_Y } else { 1 };
+                let zc = if state.z_slider == 0 { DIM_Z } else { 1 };
+                xc * yc * zc
+            }
+            SelectionMode::Range => {
+                let x_lo = state.x_min.saturating_sub(1) as usize;
+                let x_hi = state.x_max.min(DIM_X as u32).saturating_sub(1) as usize;
+                let y_lo = state.y_min.saturating_sub(1) as usize;
+                let y_hi = state.y_max.min(DIM_Y as u32).saturating_sub(1) as usize;
+                let z_lo = state.z_min.saturating_sub(1) as usize;
+                let z_hi = state.z_max.min(DIM_Z as u32).saturating_sub(1) as usize;
+                (x_hi - x_lo + 1) * (y_hi - y_lo + 1) * (z_hi - z_lo + 1)
+            }
+        };
+        **text = format!("显示 {} 方块", count);
+    }
+}
+
+/// Syncs clamped slider values back to SliderValue components so UI stays consistent.
+pub fn sync_range_sliders(
+    state: Res<RangeSelectionState>,
+    sliders: Query<(Entity, &SliderValue, &RangeSliderAxis), With<CubeGridSlider>>,
+    mut commands: Commands,
+) {
+    if !state.is_changed() {
+        return;
+    }
+    for (entity, value, axis) in &sliders {
+        let new_val = match axis {
+            RangeSliderAxis::XMin => state.x_min as f32,
+            RangeSliderAxis::XMax => state.x_max as f32,
+            RangeSliderAxis::YMin => state.y_min as f32,
+            RangeSliderAxis::YMax => state.y_max as f32,
+            RangeSliderAxis::ZMin => state.z_min as f32,
+            RangeSliderAxis::ZMax => state.z_max as f32,
+        };
+        if (value.0 - new_val).abs() > 0.5 {
+            commands.entity(entity).insert(SliderValue(new_val));
+        }
     }
 }
 
