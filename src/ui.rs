@@ -1,15 +1,17 @@
 use bevy::{
+    ecs::observer::On,
     picking::hover::Hovered,
     prelude::*,
+    ui::Checkable,
     ui_widgets::{
-        observe, slider_self_update, CoreSliderDragState, Slider, SliderRange, SliderThumb,
-        SliderValue, TrackClick,
+        observe, slider_self_update, Checkbox, checkbox_self_update, CoreSliderDragState, Slider,
+        SliderRange, SliderThumb, SliderValue, TrackClick, ValueChange,
     },
 };
 
 use crate::camera::ViewMode;
 use crate::cube_grid::{
-    compute_grid_position, RangeSelectionState, SelectionMode, DIM_X, DIM_Y, DIM_Z,
+    compute_grid_position, CubeGrid, RangeSelectionState, SelectionMode, DIM_X, DIM_Y, DIM_Z,
 };
 use crate::picking::PickingState;
 
@@ -52,6 +54,9 @@ pub enum RangeSliderAxis {
 
 #[derive(Component)]
 pub struct ModeButton;
+
+#[derive(Component)]
+pub struct FailBitCheckbox;
 
 #[derive(Component)]
 pub struct SectionSliderPanel;
@@ -360,6 +365,35 @@ fn build_button_bar(commands: &mut Commands) -> Entity {
         ))
         .id();
     commands.entity(row).add_child(mode_btn);
+
+    let checkbox = commands
+        .spawn((
+            Checkbox,
+            Checkable,
+            FailBitCheckbox,
+            Button,
+            Node {
+                display: Display::Flex,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(4.0),
+                padding: UiRect::all(Val::Px(6.0)),
+                border_radius: BorderRadius::all(Val::Px(4.0)),
+                ..default()
+            },
+            BackgroundColor(BTN_INACTIVE_COLOR),
+            observe(checkbox_self_update),
+        ))
+        .with_child((
+            Text::new("Only FailBit"),
+            TextFont {
+                font_size: 13.0,
+                ..default()
+            },
+            TextColor(Color::srgb(0.85, 0.85, 0.85)),
+        ))
+        .id();
+    commands.entity(row).add_child(checkbox);
 
     row
 }
@@ -902,6 +936,7 @@ pub fn on_mode_button_changed(
 /// Updates the cube count text when state changes.
 pub fn update_cube_count(
     state: Res<RangeSelectionState>,
+    grid: Res<CubeGrid>,
     mut texts: Query<&mut Text, With<CubeCountText>>,
 ) {
     if !state.is_changed() {
@@ -910,10 +945,24 @@ pub fn update_cube_count(
     for mut text in &mut texts {
         let count = match state.mode {
             SelectionMode::Section => {
-                let xc = if state.x_slider == 0 { DIM_X } else { 1 };
-                let yc = if state.y_slider == 0 { DIM_Y } else { 1 };
-                let zc = if state.z_slider == 0 { DIM_Z } else { 1 };
-                xc * yc * zc
+                let x_range = if state.x_slider == 0 { 0..DIM_X } else { (state.x_slider - 1) as usize..state.x_slider as usize };
+                let y_range = if state.y_slider == 0 { 0..DIM_Y } else { (state.y_slider - 1) as usize..state.y_slider as usize };
+                let z_range = if state.z_slider == 0 { 0..DIM_Z } else { (state.z_slider - 1) as usize..state.z_slider as usize };
+                if state.only_failbit {
+                    let mut count = 0usize;
+                    for z in z_range {
+                        for y in y_range.clone() {
+                            for x in x_range.clone() {
+                                if grid.get(x, y, z) == 1 {
+                                    count += 1;
+                                }
+                            }
+                        }
+                    }
+                    count
+                } else {
+                    x_range.len() * y_range.len() * z_range.len()
+                }
             }
             SelectionMode::Range => {
                 let x_lo = state.x_min.saturating_sub(1) as usize;
@@ -922,7 +971,21 @@ pub fn update_cube_count(
                 let y_hi = state.y_max.min(DIM_Y as u32).saturating_sub(1) as usize;
                 let z_lo = state.z_min.saturating_sub(1) as usize;
                 let z_hi = state.z_max.min(DIM_Z as u32).saturating_sub(1) as usize;
-                (x_hi - x_lo + 1) * (y_hi - y_lo + 1) * (z_hi - z_lo + 1)
+                if state.only_failbit {
+                    let mut count = 0usize;
+                    for z in z_lo..=z_hi {
+                        for y in y_lo..=y_hi {
+                            for x in x_lo..=x_hi {
+                                if grid.get(x, y, z) == 1 {
+                                    count += 1;
+                                }
+                            }
+                        }
+                    }
+                    count
+                } else {
+                    (x_hi - x_lo + 1) * (y_hi - y_lo + 1) * (z_hi - z_lo + 1)
+                }
             }
         };
         **text = format!("Showing {} cubes", count);
@@ -1001,5 +1064,17 @@ pub(crate) fn update_hover_tooltip(
         None => {
             *vis = Visibility::Hidden;
         }
+    }
+}
+
+/// Updates only_failbit in state when checkbox is toggled.
+pub fn on_failbit_changed(
+    value_change: On<ValueChange<bool>>,
+    checkbox: Query<(), With<FailBitCheckbox>>,
+    mut state: ResMut<RangeSelectionState>,
+) {
+    if checkbox.contains(value_change.source) {
+        state.only_failbit = value_change.value;
+        state.dirty = true;
     }
 }
