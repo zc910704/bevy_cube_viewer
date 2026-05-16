@@ -61,7 +61,13 @@ pub struct RangeSliderPanel;
 pub struct CubeCountText;
 
 #[derive(Component)]
+pub(crate) struct ButtonBarPanel;
+
+#[derive(Component)]
 pub(crate) struct HoverTooltip;
+
+const SECTION_PANEL_HEIGHT: f32 = 130.0;
+const RANGE_PANEL_HEIGHT: f32 = 220.0;
 
 const SLIDER_TRACK_COLOR: Color = Color::srgb(0.1, 0.1, 0.12);
 const SLIDER_THUMB_COLOR: Color = Color::srgb(0.4, 0.7, 0.4);
@@ -81,7 +87,7 @@ pub fn setup_ui(mut commands: Commands) {
         .spawn((
             Node {
                 position_type: PositionType::Absolute,
-                bottom: Val::Px(16.0 + 150.0),
+                bottom: Val::Px(16.0 + SECTION_PANEL_HEIGHT),
                 left: Val::Px(16.0),
                 flex_direction: FlexDirection::Column,
                 padding: UiRect::all(Val::Px(12.0)),
@@ -89,6 +95,7 @@ pub fn setup_ui(mut commands: Commands) {
                 ..default()
             },
             BackgroundColor(BG_COLOR),
+            ButtonBarPanel,
         ))
         .add_child(button_bar_row);
 
@@ -693,6 +700,7 @@ pub fn on_mode_button_changed(
     mut state: ResMut<RangeSelectionState>,
     mut panel_visibility: Query<(&mut Visibility, Has<SectionSliderPanel>), Or<(With<SectionSliderPanel>, With<RangeSliderPanel>)>>,
     mut mode_btns: Query<(&ModeButton, &mut Text), With<Button>>,
+    mut button_bar: Query<&mut Node, With<ButtonBarPanel>>,
 ) {
     for (interaction, _) in &mut interaction_query {
         if *interaction != Interaction::Pressed {
@@ -708,12 +716,14 @@ pub fn on_mode_button_changed(
         let is_section = new_mode == SelectionMode::Section;
         for (mut vis, is_section_panel) in &mut panel_visibility {
             *vis = if is_section_panel {
-                // Section panel: visible when section mode
                 if is_section { Visibility::Visible } else { Visibility::Hidden }
             } else {
-                // Range panel: visible when range mode
                 if is_section { Visibility::Hidden } else { Visibility::Visible }
             };
+        }
+
+        for mut node in &mut button_bar {
+            node.bottom = Val::Px(16.0 + if is_section { SECTION_PANEL_HEIGHT } else { RANGE_PANEL_HEIGHT });
         }
 
         for (_, mut text) in &mut mode_btns {
