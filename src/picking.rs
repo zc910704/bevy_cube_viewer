@@ -1,7 +1,7 @@
 use bevy::prelude::*;
 
 use crate::cube_grid::{
-    RangeSelectionState, SelectionMode, DIM_X, DIM_Y, DIM_Z, CUBE_SPACING,
+    CubeGrid, RangeSelectionState, SelectionMode, DIM_X, DIM_Y, DIM_Z, CUBE_SPACING,
 };
 
 /// Current hover target in grid coordinates.
@@ -56,6 +56,7 @@ fn dda_traverse(
     origin: Vec3,
     dir: Vec3,
     state: &RangeSelectionState,
+    cube_grid: &CubeGrid,
 ) -> Option<(usize, usize, usize)> {
     let (aabb_min, aabb_max) = grid_aabb();
     let dir_inv = Vec3::new(1.0 / dir.x, 1.0 / dir.y, 1.0 / dir.z);
@@ -99,8 +100,8 @@ fn dda_traverse(
             return None;
         }
 
-        // Visibility check against cross-section state
-        if is_visible(grid.0, grid.1, grid.2, state) {
+        // Visibility check against cross-section state and failbit filter
+        if is_visible(grid.0, grid.1, grid.2, state, cube_grid) {
             return Some(grid);
         }
 
@@ -135,9 +136,9 @@ fn dda_traverse(
     None
 }
 
-/// Check if a grid cell passes the cross-section filter.
-fn is_visible(x: usize, y: usize, z: usize, state: &RangeSelectionState) -> bool {
-    match state.mode {
+/// Check if a grid cell passes the cross-section filter and failbit filter.
+fn is_visible(x: usize, y: usize, z: usize, state: &RangeSelectionState, grid: &CubeGrid) -> bool {
+    let in_range = match state.mode {
         SelectionMode::Section => {
             (state.x_slider == 0 || x == (state.x_slider - 1) as usize)
             && (state.y_slider == 0 || y == (state.y_slider - 1) as usize)
@@ -152,7 +153,14 @@ fn is_visible(x: usize, y: usize, z: usize, state: &RangeSelectionState) -> bool
             let z_hi = state.z_max.min(DIM_Z as u32).saturating_sub(1) as usize;
             x >= x_lo && x <= x_hi && y >= y_lo && y <= y_hi && z >= z_lo && z <= z_hi
         }
+    };
+    if !in_range {
+        return false;
     }
+    if state.only_failbit && grid.get(x, y, z) != 1 {
+        return false;
+    }
+    true
 }
 
 /// Runs each frame: casts a ray from the camera through the cursor,
@@ -161,6 +169,7 @@ pub fn picking_system(
     camera: Single<(&Camera, &GlobalTransform)>,
     windows: Query<&Window>,
     cross_section: Res<RangeSelectionState>,
+    cube_grid: Res<CubeGrid>,
     mut picking: ResMut<PickingState>,
 ) {
     let Ok(window) = windows.single() else {
@@ -181,5 +190,5 @@ pub fn picking_system(
     };
 
     // Run DDA
-    picking.hovered_cube = dda_traverse(ray.origin, *ray.direction, &cross_section);
+    picking.hovered_cube = dda_traverse(ray.origin, *ray.direction, &cross_section, &cube_grid);
 }
