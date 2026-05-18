@@ -21,7 +21,9 @@ use ui::{
     on_view_button_changed, on_mode_button_changed, update_button_visuals,
     update_hover_coords_panel, update_hover_tooltip,
     update_cube_count, sync_range_sliders,
-    FailBitCheckbox, on_failbit_changed, update_checkbox_visuals,
+    FailBitCheckbox, OrbitVisibleCheckbox,
+    on_failbit_changed, update_checkbox_visuals,
+    on_orbit_visible_changed, update_orbit_checkbox_visuals,
 };
 
 fn main() {
@@ -56,7 +58,9 @@ fn main() {
         .add_systems(Update, update_hover_tooltip)
         .add_systems(Update, handle_esc)
         .add_observer(on_failbit_changed)
+        .add_observer(on_orbit_visible_changed)
         .add_systems(Update, update_checkbox_visuals)
+        .add_systems(Update, update_orbit_checkbox_visuals)
         .run();
 }
 
@@ -73,8 +77,10 @@ fn setup_camera(
 fn handle_esc(
     keyboard: Res<ButtonInput<KeyCode>>,
     mut state: ResMut<RangeSelectionState>,
+    mut camera_state: ResMut<CameraState>,
     section_sliders: Query<Entity, (With<CubeGridSlider>, With<crate::ui::SliderAxis>)>,
     checkbox: Query<(Entity, Has<Checked>), With<FailBitCheckbox>>,
+    orbit_checkbox: Query<(Entity, Has<Checked>), With<OrbitVisibleCheckbox>>,
     mut commands: Commands,
 ) {
     if keyboard.just_pressed(KeyCode::Escape) {
@@ -95,6 +101,7 @@ fn handle_esc(
                 state.only_failbit = false;
             }
         }
+        camera_state.orbit_only_visible = false;
         state.dirty = true;
 
         // Section sliders reset to 0 (show all); range sliders synced by sync_range_sliders.
@@ -103,6 +110,15 @@ fn handle_esc(
         }
 
         if let Ok((entity, is_checked)) = checkbox.single() {
+            if is_checked {
+                commands.trigger(SetChecked {
+                    entity,
+                    checked: false,
+                });
+            }
+        }
+
+        if let Ok((entity, is_checked)) = orbit_checkbox.single() {
             if is_checked {
                 commands.trigger(SetChecked {
                     entity,

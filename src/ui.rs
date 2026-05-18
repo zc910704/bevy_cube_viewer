@@ -10,6 +10,7 @@ use bevy::{
 };
 
 use crate::camera::ViewMode;
+use crate::camera::CameraState;
 use crate::cube_grid::{
     compute_grid_position, CubeGrid, RangeSelectionState, SelectionMode, DIM_X, DIM_Y, DIM_Z,
 };
@@ -57,6 +58,9 @@ pub struct ModeButton;
 
 #[derive(Component)]
 pub struct FailBitCheckbox;
+
+#[derive(Component)]
+pub struct OrbitVisibleCheckbox;
 
 #[derive(Component)]
 pub struct SectionSliderPanel;
@@ -345,6 +349,35 @@ fn build_button_bar(commands: &mut Commands) -> Entity {
             .id();
         commands.entity(row).add_child(btn);
     }
+
+    let orbit_checkbox = commands
+        .spawn((
+            Checkbox,
+            Checkable,
+            OrbitVisibleCheckbox,
+            Button,
+            Node {
+                display: Display::Flex,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                column_gap: Val::Px(4.0),
+                padding: UiRect::all(Val::Px(6.0)),
+                border_radius: BorderRadius::all(Val::Px(4.0)),
+                ..default()
+            },
+            BackgroundColor(BTN_INACTIVE_COLOR),
+            observe(checkbox_self_update),
+        ))
+        .with_child((
+            Text::new("Orbit Only Visible"),
+            TextFont {
+                font_size: 13.0,
+                ..default()
+            },
+            TextColor(Color::srgb(0.85, 0.85, 0.85)),
+        ))
+        .id();
+    commands.entity(row).add_child(orbit_checkbox);
 
     let mode_btn = commands
         .spawn((
@@ -1083,6 +1116,31 @@ pub fn on_failbit_changed(
 pub fn update_checkbox_visuals(
     checkbox: Query<Has<Checked>, With<FailBitCheckbox>>,
     mut bg: Query<&mut BackgroundColor, With<FailBitCheckbox>>,
+) {
+    if let Ok(is_checked) = checkbox.single() {
+        if let Ok(mut bg) = bg.single_mut() {
+            bg.0 = if is_checked {
+                BTN_ACTIVE_COLOR
+            } else {
+                BTN_INACTIVE_COLOR
+            };
+        }
+    }
+}
+
+pub fn on_orbit_visible_changed(
+    value_change: On<ValueChange<bool>>,
+    checkbox: Query<(), With<OrbitVisibleCheckbox>>,
+    mut camera_state: ResMut<CameraState>,
+) {
+    if checkbox.contains(value_change.source) {
+        camera_state.orbit_only_visible = value_change.value;
+    }
+}
+
+pub fn update_orbit_checkbox_visuals(
+    checkbox: Query<Has<Checked>, With<OrbitVisibleCheckbox>>,
+    mut bg: Query<&mut BackgroundColor, With<OrbitVisibleCheckbox>>,
 ) {
     if let Ok(is_checked) = checkbox.single() {
         if let Ok(mut bg) = bg.single_mut() {

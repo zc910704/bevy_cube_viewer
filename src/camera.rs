@@ -4,7 +4,7 @@ use bevy::input::mouse::MouseWheel;
 use bevy::ui_widgets::CoreSliderDragState;
 use bevy::window::Window;
 
-use crate::cube_grid::{DIM_X, DIM_Y, DIM_Z, CUBE_SPACING};
+use crate::cube_grid::{RangeSelectionState, SelectionMode, DIM_X, DIM_Y, DIM_Z, CUBE_SPACING};
 use crate::ui::CubeGridSlider;
 
 /// 平移灵敏度：1.0 = 鼠标像素与场景移动 1:1 匹配
@@ -32,11 +32,52 @@ impl ViewMode {
     }
 }
 
+pub fn visible_center(state: &RangeSelectionState) -> Vec3 {
+    let (x_lo, x_hi) = match state.mode {
+        SelectionMode::Section => axis_center_bounds(state.x_slider, DIM_X),
+        SelectionMode::Range => range_center_bounds(state.x_min, state.x_max, DIM_X),
+    };
+    let (y_lo, y_hi) = match state.mode {
+        SelectionMode::Section => axis_center_bounds(state.y_slider, DIM_Y),
+        SelectionMode::Range => range_center_bounds(state.y_min, state.y_max, DIM_Y),
+    };
+    let (z_lo, z_hi) = match state.mode {
+        SelectionMode::Section => axis_center_bounds(state.z_slider, DIM_Z),
+        SelectionMode::Range => range_center_bounds(state.z_min, state.z_max, DIM_Z),
+    };
+
+    let x_mid = (x_lo + x_hi) as f32 / 2.0;
+    let y_mid = (y_lo + y_hi) as f32 / 2.0;
+    let z_mid = (z_lo + z_hi) as f32 / 2.0;
+
+    Vec3::new(
+        (x_mid - (DIM_X - 1) as f32 / 2.0) * CUBE_SPACING,
+        (z_mid - (DIM_Z - 1) as f32 / 2.0) * CUBE_SPACING,
+        (y_mid - (DIM_Y - 1) as f32 / 2.0) * CUBE_SPACING,
+    )
+}
+
+fn axis_center_bounds(slider: u32, dim: usize) -> (usize, usize) {
+    if slider == 0 {
+        (0, dim - 1)
+    } else {
+        let v = (slider - 1) as usize;
+        (v, v)
+    }
+}
+
+fn range_center_bounds(min: u32, max: u32, dim: usize) -> (usize, usize) {
+    let lo = min.saturating_sub(1) as usize;
+    let hi = max.min(dim as u32).saturating_sub(1) as usize;
+    (lo, hi)
+}
+
 #[derive(Resource)]
 pub struct CameraState {
     pub orbit_distance: f32,
     pub section_distance: f32,
     pub section_target: Vec3,
+    pub orbit_only_visible: bool,
 }
 
 impl Default for CameraState {
@@ -45,6 +86,7 @@ impl Default for CameraState {
             orbit_distance: 80.0,
             section_distance: 200.0,
             section_target: Vec3::ZERO,
+            orbit_only_visible: false,
         }
     }
 }
@@ -57,6 +99,7 @@ pub fn orbit_camera(
     mut mouse_wheel_reader: MessageReader<MouseWheel>,
     mut camera_state: ResMut<CameraState>,
     view_mode: Res<ViewMode>,
+    cross_section: Res<RangeSelectionState>,
     mut prev_mode: Local<Option<ViewMode>>,
     slider_drag: Query<&CoreSliderDragState, With<CubeGridSlider>>,
     windows: Query<&Window>,
@@ -111,7 +154,11 @@ pub fn orbit_camera(
                     (camera_state.orbit_distance - event.y * 5.0).clamp(10.0, 2000.0);
             }
 
-            let target = Vec3::ZERO;
+            let target = if camera_state.orbit_only_visible {
+                visible_center(&cross_section)
+            } else {
+                Vec3::ZERO
+            };
             transform.translation = target - transform.forward() * camera_state.orbit_distance;
         }
         ViewMode::SectionX | ViewMode::SectionY | ViewMode::SectionZ => {
