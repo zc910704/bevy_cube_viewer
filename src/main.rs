@@ -67,9 +67,13 @@ fn main() {
 fn setup_camera(
     mut commands: Commands,
 ) {
+    // Isometric view from (+X, +Y, +Z) octant, far enough to see the entire array
+    let iso_dir = Vec3::new(1.0, 1.0, 1.0).normalize();
+    let orbit_distance = 1300.0;
     commands.spawn((
         Camera3d::default(),
-        Transform::from_xyz(-80.0, 20.0, 0.0).looking_at(Vec3::ZERO, Vec3::Y),
+        Transform::from_translation(iso_dir * orbit_distance)
+            .looking_at(Vec3::ZERO, Vec3::Y),
         bevy::render::view::NoIndirectDrawing,
     ));
 }

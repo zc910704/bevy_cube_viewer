@@ -83,7 +83,7 @@ pub struct CameraState {
 impl Default for CameraState {
     fn default() -> Self {
         Self {
-            orbit_distance: 80.0,
+            orbit_distance: 1300.0,
             section_distance: 200.0,
             section_target: Vec3::ZERO,
             orbit_only_visible: false,
@@ -141,7 +141,7 @@ pub fn orbit_camera(
         ViewMode::ThreeD => {
             if mouse_buttons.pressed(MouseButton::Left) && !dragging_slider {
                 let (yaw, pitch, roll) = transform.rotation.to_euler(EulerRot::YXZ);
-                let distance_scale = (80.0 / camera_state.orbit_distance).sqrt();
+                let distance_scale = (1300.0 / camera_state.orbit_distance).sqrt();
                 let new_yaw = yaw - delta.x * ORBIT_SENSITIVITY * distance_scale;
                 let new_pitch =
                     (pitch - delta.y * ORBIT_SENSITIVITY * distance_scale).clamp(-1.5, 1.5);

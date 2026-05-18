@@ -121,6 +121,7 @@ pub fn setup_ui(mut commands: Commands) {
                 position_type: PositionType::Absolute,
                 bottom: Val::Px(16.0),
                 left: Val::Px(16.0),
+                width: Val::Px(700.0),
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(8.0),
                 padding: UiRect::all(Val::Px(12.0)),
@@ -247,6 +248,7 @@ pub fn setup_ui(mut commands: Commands) {
                 position_type: PositionType::Absolute,
                 bottom: Val::Px(16.0),
                 left: Val::Px(16.0),
+                width: Val::Px(700.0),
                 flex_direction: FlexDirection::Column,
                 row_gap: Val::Px(4.0),
                 padding: UiRect::all(Val::Px(12.0)),
@@ -316,6 +318,7 @@ fn build_button_bar(commands: &mut Commands) -> Entity {
         .spawn(Node {
             display: Display::Flex,
             flex_direction: FlexDirection::Row,
+            align_items: AlignItems::Center,
             column_gap: Val::Px(4.0),
             ..default()
         })
@@ -333,12 +336,17 @@ fn build_button_bar(commands: &mut Commands) -> Entity {
             .spawn((
                 Button,
                 Node {
+                    display: Display::Flex,
+                    align_items: AlignItems::Center,
+                    justify_content: JustifyContent::Center,
                     padding: UiRect::all(Val::Px(6.0)),
                     border_radius: BorderRadius::all(Val::Px(4.0)),
                     ..default()
                 },
                 BackgroundColor(BTN_INACTIVE_COLOR),
                 axis,
+            ))
+            .with_child((
                 Text::new(label),
                 TextFont {
                     font_size: 13.0,
@@ -360,6 +368,7 @@ fn build_button_bar(commands: &mut Commands) -> Entity {
                 display: Display::Flex,
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
                 column_gap: Val::Px(4.0),
                 padding: UiRect::all(Val::Px(6.0)),
                 border_radius: BorderRadius::all(Val::Px(4.0)),
@@ -383,12 +392,17 @@ fn build_button_bar(commands: &mut Commands) -> Entity {
         .spawn((
             Button,
             Node {
+                display: Display::Flex,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
                 padding: UiRect::all(Val::Px(6.0)),
                 border_radius: BorderRadius::all(Val::Px(4.0)),
                 ..default()
             },
             BackgroundColor(BTN_INACTIVE_COLOR),
             ModeButton,
+        ))
+        .with_child((
             Text::new("Range Mode"),
             TextFont {
                 font_size: 13.0,
@@ -409,6 +423,7 @@ fn build_button_bar(commands: &mut Commands) -> Entity {
                 display: Display::Flex,
                 flex_direction: FlexDirection::Row,
                 align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
                 column_gap: Val::Px(4.0),
                 padding: UiRect::all(Val::Px(6.0)),
                 border_radius: BorderRadius::all(Val::Px(4.0)),
@@ -531,18 +546,16 @@ fn build_slider(commands: &mut Commands, axis: SliderAxis, max: f32, label: &str
         .add_children(&[track, thumb_wrapper])
         .id();
 
-    let row = commands
+    commands
         .spawn(Node {
             display: Display::Flex,
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(2.0),
-            width: Val::Px(560.0),
+            width: Val::Percent(100.0),
             ..default()
         })
         .add_children(&[label_row, slider])
-        .id();
-
-    row
+        .id()
 }
 
 fn build_range_slider(
@@ -657,7 +670,7 @@ fn build_range_slider(
             display: Display::Flex,
             flex_direction: FlexDirection::Column,
             row_gap: Val::Px(1.0),
-            width: Val::Px(560.0),
+            width: Val::Percent(100.0),
             ..default()
         })
         .add_children(&[label_row, slider])
@@ -915,7 +928,8 @@ pub fn on_mode_button_changed(
         (&mut Visibility, Has<SectionSliderPanel>),
         Or<(With<SectionSliderPanel>, With<RangeSliderPanel>)>,
     >,
-    mut mode_btns: Query<(&ModeButton, &mut Text), With<Button>>,
+    mode_btn_children: Query<&Children, (With<ModeButton>, With<Button>)>,
+    mut mode_texts: Query<&mut Text>,
     mut button_bar: Query<&mut Node, With<ButtonBarPanel>>,
 ) {
     for (interaction, _) in &mut interaction_query {
@@ -956,12 +970,16 @@ pub fn on_mode_button_changed(
             );
         }
 
-        for (_, mut text) in &mut mode_btns {
-            **text = if is_section {
-                "Range Mode".into()
-            } else {
-                "Section Mode".into()
-            };
+        for children in &mode_btn_children {
+            for child in children.iter() {
+                if let Ok(mut text) = mode_texts.get_mut(child) {
+                    **text = if is_section {
+                        "Range Mode".into()
+                    } else {
+                        "Section Mode".into()
+                    };
+                }
+            }
         }
     }
 }
