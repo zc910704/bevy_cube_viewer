@@ -29,7 +29,7 @@ use bevy::{
 
 use bytemuck::{Pod, Zeroable};
 
-use crate::cube_grid::{InstanceData, CubeGrid, RangeSelectionState, compute_visible_instances};
+use crate::cube_grid::{InstanceData, CubeGrid, CubeGridDims, RangeSelectionState, compute_visible_instances, CUBE_SPACING};
 use crate::picking::PickingState;
 
 const SHADER_PATH: &str = "shaders/cube_grid.wgsl";
@@ -40,22 +40,17 @@ const SHADER_PATH: &str = "shaders/cube_grid.wgsl";
 #[repr(C)]
 pub(crate) struct HoverUniform {
     hover_grid: [u32; 4],  // x, y, z, has_hover (0 or 1)
-    grid_dims: [u32; 4],   // DIM_X, DIM_Y, DIM_Z, unused
+    grid_dims: [u32; 4],   // dim_x, dim_y, dim_z, unused
     cube_spacing: f32,
     _pad: [f32; 3],        // align to 16 bytes
 }
 
-impl Default for HoverUniform {
-    fn default() -> Self {
+impl HoverUniform {
+    fn from_dims(dims: CubeGridDims) -> Self {
         Self {
             hover_grid: [0; 4],
-            grid_dims: [
-                crate::cube_grid::DIM_X as u32,
-                crate::cube_grid::DIM_Y as u32,
-                crate::cube_grid::DIM_Z as u32,
-                0,
-            ],
-            cube_spacing: crate::cube_grid::CUBE_SPACING,
+            grid_dims: [dims.x as u32, dims.y as u32, dims.z as u32, 0],
+            cube_spacing: CUBE_SPACING,
             _pad: [0.0; 3],
         }
     }
@@ -391,7 +386,7 @@ pub fn spawn_cube_grid(
     commands.spawn((
         Mesh3d(meshes.add(Cuboid::new(1.0, 1.0, 1.0))),
         InstanceMaterialData(visible),
-        HoverGridData(HoverUniform::default()),
+        HoverGridData(HoverUniform::from_dims(grid.dims)),
         Transform::IDENTITY,
         NoFrustumCulling,
     ));

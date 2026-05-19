@@ -2,11 +2,26 @@ use bevy::prelude::*;
 use bytemuck::{Pod, Zeroable};
 use rand::Rng;
 
-// Coordinate convention: X = left/right, Y = depth, Z = up/down.
-pub const DIM_X: usize = 64;
-pub const DIM_Y: usize = 1024;
-pub const DIM_Z: usize = 16;
-pub const TOTAL_CUBES: usize = DIM_X * DIM_Y * DIM_Z; // 1,048,576
+/// Grid dimensions. Customizable before spawning.
+#[derive(Clone, Copy, Debug)]
+pub struct CubeGridDims {
+    pub x: usize,
+    pub y: usize,
+    pub z: usize,
+}
+
+impl CubeGridDims {
+    pub const DEFAULT: Self = Self {
+        x: 100,
+        y: 100,
+        z: 100,
+    };
+
+    #[inline]
+    pub fn total(self) -> usize {
+        self.x * self.y * self.z
+    }
+}
 
 pub const CUBE_SIDE: f32 = 1.0;
 pub const CUBE_GAP: f32 = 0.2;
@@ -22,36 +37,39 @@ pub struct InstanceData {
     pub color: [f32; 4],    // rgba
 }
 
-/// Flat u8 array for 64×1024×16 cube colors: 0 = white, 1 = red, 2 = gray.
+/// Flat u8 array for cube colors: 0 = white, 1 = red, 2 = gray.
 #[derive(Resource, Clone)]
 pub struct CubeGrid {
+    pub dims: CubeGridDims,
     pub data: Vec<u8>,
 }
 
 impl Default for CubeGrid {
     fn default() -> Self {
         let mut rng = rand::thread_rng();
+        let dims = CubeGridDims::DEFAULT;
         Self {
-            data: (0..TOTAL_CUBES).map(|_| rng.gen_range(0..3)).collect(),
+            dims,
+            data: (0..dims.total()).map(|_| rng.gen_range(0..3)).collect(),
         }
     }
 }
 
 impl CubeGrid {
     #[inline]
-    pub fn index(x: usize, y: usize, z: usize) -> usize {
-        x + y * DIM_X + z * DIM_X * DIM_Y
+    pub fn index(&self, x: usize, y: usize, z: usize) -> usize {
+        x + y * self.dims.x + z * self.dims.x * self.dims.y
     }
 
     #[inline]
     pub fn get(&self, x: usize, y: usize, z: usize) -> u8 {
-        self.data[Self::index(x, y, z)]
+        self.data[self.index(x, y, z)]
     }
 
     #[allow(dead_code)]
     #[inline]
     pub fn set(&mut self, x: usize, y: usize, z: usize, value: u8) {
-        let idx = Self::index(x, y, z);
+        let idx = self.index(x, y, z);
         self.data[idx] = value;
     }
 }
@@ -86,16 +104,17 @@ pub struct RangeSelectionState {
 
 impl Default for RangeSelectionState {
     fn default() -> Self {
+        let dims = CubeGridDims::DEFAULT;
         Self {
             x_slider: 0,
             y_slider: 0,
             z_slider: 0,
             x_min: 1,
-            x_max: DIM_X as u32,
+            x_max: dims.x as u32,
             y_min: 1,
-            y_max: DIM_Y as u32,
+            y_max: dims.y as u32,
             z_min: 1,
-            z_max: DIM_Z as u32,
+            z_max: dims.z as u32,
             mode: SelectionMode::default(),
             only_failbit: false,
             dirty: true,
@@ -107,11 +126,11 @@ impl Default for RangeSelectionState {
 /// Array is centered at origin.
 /// Parameters: x = left/right, y = depth, z = up/down.
 #[inline]
-pub fn compute_grid_position(x: usize, y: usize, z: usize) -> Vec3 {
+pub fn compute_grid_position(dims: CubeGridDims, x: usize, y: usize, z: usize) -> Vec3 {
     Vec3::new(
-        (x as f32 - (DIM_X - 1) as f32 / 2.0) * CUBE_SPACING, // world X: left/right
-        (z as f32 - (DIM_Z - 1) as f32 / 2.0) * CUBE_SPACING, // world Y: up/down
-        (y as f32 - (DIM_Y - 1) as f32 / 2.0) * CUBE_SPACING, // world Z: depth
+        (x as f32 - (dims.x - 1) as f32 / 2.0) * CUBE_SPACING, // world X: left/right
+        (z as f32 - (dims.z - 1) as f32 / 2.0) * CUBE_SPACING, // world Y: up/down
+        (y as f32 - (dims.y - 1) as f32 / 2.0) * CUBE_SPACING, // world Z: depth
     )
 }
 
@@ -124,16 +143,17 @@ pub fn compute_visible_instances(
     grid: &CubeGrid,
     state: &RangeSelectionState,
 ) -> Vec<InstanceData> {
+    let dims = grid.dims;
     let (x_range, y_range, z_range) = match state.mode {
         SelectionMode::Section => (
-            axis_range(state.x_slider, DIM_X),
-            axis_range(state.y_slider, DIM_Y),
-            axis_range(state.z_slider, DIM_Z),
+            axis_range(state.x_slider, dims.x),
+            axis_range(state.y_slider, dims.y),
+            axis_range(state.z_slider, dims.z),
         ),
         SelectionMode::Range => (
-            range_axis_range(state.x_min, state.x_max, DIM_X),
-            range_axis_range(state.y_min, state.y_max, DIM_Y),
-            range_axis_range(state.z_min, state.z_max, DIM_Z),
+            range_axis_range(state.x_min, state.x_max, dims.x),
+            range_axis_range(state.y_min, state.y_max, dims.y),
+            range_axis_range(state.z_min, state.z_max, dims.z),
         ),
     };
 
@@ -143,7 +163,7 @@ pub fn compute_visible_instances(
     for &z in &z_range {
         for &y in &y_range {
             for &x in &x_range {
-                let pos = compute_grid_position(x, y, z);
+                let pos = compute_grid_position(dims, x, y, z);
                 if state.only_failbit && grid.get(x, y, z) != 1 {
                     continue;
                 }

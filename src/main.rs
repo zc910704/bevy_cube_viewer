@@ -15,7 +15,7 @@ use bevy::ui_widgets::{UiWidgetsPlugins, SliderValue, SetChecked};
 use bevy::ui::Checked;
 
 use camera::{CameraState, ViewMode, orbit_camera};
-use cube_grid::{CubeGrid, RangeSelectionState, SelectionMode, DIM_X, DIM_Y, DIM_Z};
+use cube_grid::{CubeGrid, RangeSelectionState, SelectionMode};
 use cube_material::{CubeGridMaterialPlugin, spawn_cube_grid, update_instance_data, update_hover_grid_data};
 use guide_line::{ShowGuideLine, draw_guide_line};
 use ui::{
@@ -91,6 +91,7 @@ fn handle_esc(
     mut state: ResMut<RangeSelectionState>,
     mut camera_state: ResMut<CameraState>,
     mut show_guide: ResMut<ShowGuideLine>,
+    grid: Res<CubeGrid>,
     section_sliders: Query<Entity, (With<CubeGridSlider>, With<crate::ui::SliderAxis>)>,
     checkbox: Query<(Entity, Has<Checked>), With<FailBitCheckbox>>,
     orbit_checkbox: Query<(Entity, Has<Checked>), With<OrbitVisibleCheckbox>>,
@@ -107,11 +108,11 @@ fn handle_esc(
             }
             SelectionMode::Range => {
                 state.x_min = 1;
-                state.x_max = DIM_X as u32;
+                state.x_max = grid.dims.x as u32;
                 state.y_min = 1;
-                state.y_max = DIM_Y as u32;
+                state.y_max = grid.dims.y as u32;
                 state.z_min = 1;
-                state.z_max = DIM_Z as u32;
+                state.z_max = grid.dims.z as u32;
                 state.only_failbit = false;
             }
         }

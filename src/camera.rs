@@ -4,7 +4,7 @@ use bevy::input::mouse::MouseWheel;
 use bevy::ui_widgets::CoreSliderDragState;
 use bevy::window::Window;
 
-use crate::cube_grid::{RangeSelectionState, SelectionMode, DIM_X, DIM_Y, DIM_Z, CUBE_SPACING};
+use crate::cube_grid::{CubeGrid, CubeGridDims, RangeSelectionState, SelectionMode, CUBE_SPACING};
 use crate::ui::CubeGridSlider;
 
 /// 平移灵敏度：1.0 = 鼠标像素与场景移动 1:1 匹配
@@ -32,18 +32,18 @@ impl ViewMode {
     }
 }
 
-pub fn visible_center(state: &RangeSelectionState) -> Vec3 {
+pub fn visible_center(state: &RangeSelectionState, dims: CubeGridDims) -> Vec3 {
     let (x_lo, x_hi) = match state.mode {
-        SelectionMode::Section => axis_center_bounds(state.x_slider, DIM_X),
-        SelectionMode::Range => range_center_bounds(state.x_min, state.x_max, DIM_X),
+        SelectionMode::Section => axis_center_bounds(state.x_slider, dims.x),
+        SelectionMode::Range => range_center_bounds(state.x_min, state.x_max, dims.x),
     };
     let (y_lo, y_hi) = match state.mode {
-        SelectionMode::Section => axis_center_bounds(state.y_slider, DIM_Y),
-        SelectionMode::Range => range_center_bounds(state.y_min, state.y_max, DIM_Y),
+        SelectionMode::Section => axis_center_bounds(state.y_slider, dims.y),
+        SelectionMode::Range => range_center_bounds(state.y_min, state.y_max, dims.y),
     };
     let (z_lo, z_hi) = match state.mode {
-        SelectionMode::Section => axis_center_bounds(state.z_slider, DIM_Z),
-        SelectionMode::Range => range_center_bounds(state.z_min, state.z_max, DIM_Z),
+        SelectionMode::Section => axis_center_bounds(state.z_slider, dims.z),
+        SelectionMode::Range => range_center_bounds(state.z_min, state.z_max, dims.z),
     };
 
     let x_mid = (x_lo + x_hi) as f32 / 2.0;
@@ -51,9 +51,9 @@ pub fn visible_center(state: &RangeSelectionState) -> Vec3 {
     let z_mid = (z_lo + z_hi) as f32 / 2.0;
 
     Vec3::new(
-        (x_mid - (DIM_X - 1) as f32 / 2.0) * CUBE_SPACING,
-        (z_mid - (DIM_Z - 1) as f32 / 2.0) * CUBE_SPACING,
-        (y_mid - (DIM_Y - 1) as f32 / 2.0) * CUBE_SPACING,
+        (x_mid - (dims.x - 1) as f32 / 2.0) * CUBE_SPACING,
+        (z_mid - (dims.z - 1) as f32 / 2.0) * CUBE_SPACING,
+        (y_mid - (dims.y - 1) as f32 / 2.0) * CUBE_SPACING,
     )
 }
 
@@ -100,6 +100,7 @@ pub fn orbit_camera(
     mut camera_state: ResMut<CameraState>,
     view_mode: Res<ViewMode>,
     cross_section: Res<RangeSelectionState>,
+    grid: Res<CubeGrid>,
     mut prev_mode: Local<Option<ViewMode>>,
     slider_drag: Query<&CoreSliderDragState, With<CubeGridSlider>>,
     windows: Query<&Window>,
@@ -120,13 +121,13 @@ pub fn orbit_camera(
             };
             let visible_extent = match mode {
                 ViewMode::SectionX => {
-                    (DIM_Y as f32 * CUBE_SPACING).max(DIM_Z as f32 * CUBE_SPACING)
+                    (grid.dims.y as f32 * CUBE_SPACING).max(grid.dims.z as f32 * CUBE_SPACING)
                 }
                 ViewMode::SectionY => {
-                    (DIM_X as f32 * CUBE_SPACING).max(DIM_Z as f32 * CUBE_SPACING)
+                    (grid.dims.x as f32 * CUBE_SPACING).max(grid.dims.z as f32 * CUBE_SPACING)
                 }
                 ViewMode::SectionZ => {
-                    (DIM_X as f32 * CUBE_SPACING).max(DIM_Y as f32 * CUBE_SPACING)
+                    (grid.dims.x as f32 * CUBE_SPACING).max(grid.dims.y as f32 * CUBE_SPACING)
                 }
                 _ => 100.0,
             };
@@ -155,7 +156,7 @@ pub fn orbit_camera(
             }
 
             let target = if camera_state.orbit_only_visible {
-                visible_center(&cross_section)
+                visible_center(&cross_section, grid.dims)
             } else {
                 Vec3::ZERO
             };

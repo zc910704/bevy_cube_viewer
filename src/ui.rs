@@ -12,7 +12,7 @@ use bevy::{
 use crate::camera::ViewMode;
 use crate::camera::CameraState;
 use crate::cube_grid::{
-    compute_grid_position, CubeGrid, RangeSelectionState, SelectionMode, DIM_X, DIM_Y, DIM_Z,
+    compute_grid_position, CubeGrid, RangeSelectionState, SelectionMode,
 };
 use crate::guide_line::{ShowGuideLine, guide_line_label_positions};
 use crate::picking::PickingState;
@@ -99,9 +99,10 @@ const BTN_INACTIVE_COLOR: Color = Color::srgb(0.1, 0.1, 0.12);
 const BTN_ACTIVE_COLOR: Color = Color::srgb(0.4, 0.7, 0.4);
 const BTN_HOVER_COLOR: Color = Color::srgb(0.6, 0.85, 0.6);
 
-pub fn setup_ui(mut commands: Commands) {
+pub fn setup_ui(mut commands: Commands, grid: Res<CubeGrid>) {
     // Build button bar content first to avoid borrow conflict.
     let button_bar_row = build_button_bar(&mut commands);
+    let dims = grid.dims;
 
     // Button bar panel
     commands
@@ -121,9 +122,9 @@ pub fn setup_ui(mut commands: Commands) {
         .add_child(button_bar_row);
 
     // Slider panel
-    let x_slider = build_slider(&mut commands, SliderAxis::X, DIM_X as f32, "X");
-    let y_slider = build_slider(&mut commands, SliderAxis::Y, DIM_Y as f32, "Y");
-    let z_slider = build_slider(&mut commands, SliderAxis::Z, DIM_Z as f32, "Z");
+    let x_slider = build_slider(&mut commands, SliderAxis::X, dims.x as f32, "X");
+    let y_slider = build_slider(&mut commands, SliderAxis::Y, dims.y as f32, "Y");
+    let z_slider = build_slider(&mut commands, SliderAxis::Z, dims.z as f32, "Z");
 
     commands
         .spawn((
@@ -149,7 +150,7 @@ pub fn setup_ui(mut commands: Commands) {
         &mut commands,
         RangeSliderAxis::XMin,
         1.0,
-        DIM_X as f32,
+        dims.x as f32,
         1.0,
         "min",
     );
@@ -157,15 +158,15 @@ pub fn setup_ui(mut commands: Commands) {
         &mut commands,
         RangeSliderAxis::XMax,
         1.0,
-        DIM_X as f32,
-        DIM_X as f32,
+        dims.x as f32,
+        dims.x as f32,
         "max",
     );
     let y_min = build_range_slider(
         &mut commands,
         RangeSliderAxis::YMin,
         1.0,
-        DIM_Y as f32,
+        dims.y as f32,
         1.0,
         "min",
     );
@@ -173,15 +174,15 @@ pub fn setup_ui(mut commands: Commands) {
         &mut commands,
         RangeSliderAxis::YMax,
         1.0,
-        DIM_Y as f32,
-        DIM_Y as f32,
+        dims.y as f32,
+        dims.y as f32,
         "max",
     );
     let z_min = build_range_slider(
         &mut commands,
         RangeSliderAxis::ZMin,
         1.0,
-        DIM_Z as f32,
+        dims.z as f32,
         1.0,
         "min",
     );
@@ -189,8 +190,8 @@ pub fn setup_ui(mut commands: Commands) {
         &mut commands,
         RangeSliderAxis::ZMax,
         1.0,
-        DIM_Z as f32,
-        DIM_Z as f32,
+        dims.z as f32,
+        dims.z as f32,
         "max",
     );
 
@@ -1082,11 +1083,12 @@ pub fn update_cube_count(
         return;
     }
     for mut text in &mut texts {
+        let dims = grid.dims;
         let count = match state.mode {
             SelectionMode::Section => {
-                let x_range = if state.x_slider == 0 { 0..DIM_X } else { (state.x_slider - 1) as usize..state.x_slider as usize };
-                let y_range = if state.y_slider == 0 { 0..DIM_Y } else { (state.y_slider - 1) as usize..state.y_slider as usize };
-                let z_range = if state.z_slider == 0 { 0..DIM_Z } else { (state.z_slider - 1) as usize..state.z_slider as usize };
+                let x_range = if state.x_slider == 0 { 0..dims.x } else { (state.x_slider - 1) as usize..state.x_slider as usize };
+                let y_range = if state.y_slider == 0 { 0..dims.y } else { (state.y_slider - 1) as usize..state.y_slider as usize };
+                let z_range = if state.z_slider == 0 { 0..dims.z } else { (state.z_slider - 1) as usize..state.z_slider as usize };
                 if state.only_failbit {
                     let mut count = 0usize;
                     for z in z_range {
@@ -1105,11 +1107,11 @@ pub fn update_cube_count(
             }
             SelectionMode::Range => {
                 let x_lo = state.x_min.saturating_sub(1) as usize;
-                let x_hi = state.x_max.min(DIM_X as u32).saturating_sub(1) as usize;
+                let x_hi = state.x_max.min(dims.x as u32).saturating_sub(1) as usize;
                 let y_lo = state.y_min.saturating_sub(1) as usize;
-                let y_hi = state.y_max.min(DIM_Y as u32).saturating_sub(1) as usize;
+                let y_hi = state.y_max.min(dims.y as u32).saturating_sub(1) as usize;
                 let z_lo = state.z_min.saturating_sub(1) as usize;
-                let z_hi = state.z_max.min(DIM_Z as u32).saturating_sub(1) as usize;
+                let z_hi = state.z_max.min(dims.z as u32).saturating_sub(1) as usize;
                 if state.only_failbit {
                     let mut count = 0usize;
                     for z in z_lo..=z_hi {
@@ -1171,6 +1173,7 @@ pub(crate) fn update_hover_coords_panel(
 /// Positions the floating tooltip in screen space above the hovered cube.
 pub(crate) fn update_hover_tooltip(
     picking: Res<PickingState>,
+    grid: Res<CubeGrid>,
     camera: Single<(&Camera, &GlobalTransform)>,
     mut tooltip: Query<(&mut Node, &mut Visibility, &Children), With<HoverTooltip>>,
     mut tooltip_texts: Query<&mut Text, Without<HoverTooltip>>,
@@ -1182,7 +1185,7 @@ pub(crate) fn update_hover_tooltip(
 
     match picking.hovered_cube {
         Some((x, y, z)) => {
-            let world_pos = compute_grid_position(x, y, z);
+            let world_pos = compute_grid_position(grid.dims, x, y, z);
             // Offset above the cube center
             let label_pos = world_pos + Vec3::new(0.0, 0.8, 0.0);
 
@@ -1289,6 +1292,7 @@ pub fn update_guide_checkbox_visuals(
 pub(crate) fn update_guide_line_label(
     show: Res<ShowGuideLine>,
     state: Res<RangeSelectionState>,
+    grid: Res<CubeGrid>,
     camera: Single<(&Camera, &GlobalTransform)>,
     mut labels: Query<(&mut Node, &mut Visibility, &GuideLineLabel)>,
 ) {
@@ -1299,7 +1303,7 @@ pub(crate) fn update_guide_line_label(
         return;
     }
     let (camera, cam_transform) = camera.into_inner();
-    let (x_pos, y_pos) = guide_line_label_positions(&state);
+    let (x_pos, y_pos) = guide_line_label_positions(&state, grid.dims);
 
     for (mut node, mut vis, label) in &mut labels {
         let world_pos = match label {
