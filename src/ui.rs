@@ -14,6 +14,7 @@ use crate::camera::CameraState;
 use crate::cube_grid::{
     compute_grid_position, CubeGrid, RangeSelectionState, SelectionMode, DIM_X, DIM_Y, DIM_Z,
 };
+use crate::guide_line::{ShowGuideLine, guide_line_label_positions};
 use crate::picking::PickingState;
 
 #[derive(Component, Clone, Copy, PartialEq, Eq)]
@@ -61,6 +62,15 @@ pub struct FailBitCheckbox;
 
 #[derive(Component)]
 pub struct OrbitVisibleCheckbox;
+
+#[derive(Component)]
+pub struct GuideLineCheckbox;
+
+#[derive(Component, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GuideLineLabel {
+    XAxis,
+    YAxis,
+}
 
 #[derive(Component)]
 pub struct SectionSliderPanel;
@@ -311,6 +321,53 @@ pub fn setup_ui(mut commands: Commands) {
                 TextColor(Color::srgb(1.0, 0.8, 0.0)),
             ));
         });
+
+    // Guide line labels (screen-space, follow 3D guide line midpoints)
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                padding: UiRect::all(Val::Px(4.0)),
+                border_radius: BorderRadius::all(Val::Px(4.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
+            Visibility::Visible,
+            GuideLineLabel::XAxis,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new("X Axis"),
+                TextFont {
+                    font_size: 12.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(1.0, 0.25, 0.25)),
+            ));
+        });
+
+    commands
+        .spawn((
+            Node {
+                position_type: PositionType::Absolute,
+                padding: UiRect::all(Val::Px(4.0)),
+                border_radius: BorderRadius::all(Val::Px(4.0)),
+                ..default()
+            },
+            BackgroundColor(Color::srgba(0.0, 0.0, 0.0, 0.7)),
+            Visibility::Visible,
+            GuideLineLabel::YAxis,
+        ))
+        .with_children(|parent| {
+            parent.spawn((
+                Text::new("Y Axis"),
+                TextFont {
+                    font_size: 12.0,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.15, 1.0, 0.5)),
+            ));
+        });
 }
 
 fn build_button_bar(commands: &mut Commands) -> Entity {
@@ -387,6 +444,37 @@ fn build_button_bar(commands: &mut Commands) -> Entity {
         ))
         .id();
     commands.entity(row).add_child(orbit_checkbox);
+
+    let guide_checkbox = commands
+        .spawn((
+            Checkbox,
+            Checkable,
+            Checked,
+            GuideLineCheckbox,
+            Button,
+            Node {
+                display: Display::Flex,
+                flex_direction: FlexDirection::Row,
+                align_items: AlignItems::Center,
+                justify_content: JustifyContent::Center,
+                column_gap: Val::Px(4.0),
+                padding: UiRect::all(Val::Px(6.0)),
+                border_radius: BorderRadius::all(Val::Px(4.0)),
+                ..default()
+            },
+            BackgroundColor(BTN_INACTIVE_COLOR),
+            observe(checkbox_self_update),
+        ))
+        .with_child((
+            Text::new("Guide Line"),
+            TextFont {
+                font_size: 13.0,
+                ..default()
+            },
+            TextColor(Color::srgb(0.85, 0.85, 0.85)),
+        ))
+        .id();
+    commands.entity(row).add_child(guide_checkbox);
 
     let mode_btn = commands
         .spawn((
@@ -1167,6 +1255,63 @@ pub fn update_orbit_checkbox_visuals(
             } else {
                 BTN_INACTIVE_COLOR
             };
+        }
+    }
+}
+
+/// Toggles ShowGuideLine resource when guide line checkbox changes.
+pub fn on_guide_line_changed(
+    value_change: On<ValueChange<bool>>,
+    checkbox: Query<(), With<GuideLineCheckbox>>,
+    mut show: ResMut<ShowGuideLine>,
+) {
+    if checkbox.contains(value_change.source) {
+        show.0 = value_change.value;
+    }
+}
+
+pub fn update_guide_checkbox_visuals(
+    checkbox: Query<Has<Checked>, With<GuideLineCheckbox>>,
+    mut bg: Query<&mut BackgroundColor, With<GuideLineCheckbox>>,
+) {
+    if let Ok(is_checked) = checkbox.single() {
+        if let Ok(mut bg) = bg.single_mut() {
+            bg.0 = if is_checked {
+                BTN_ACTIVE_COLOR
+            } else {
+                BTN_INACTIVE_COLOR
+            };
+        }
+    }
+}
+
+/// Positions the guide line labels in screen space at their 3D midpoints.
+pub(crate) fn update_guide_line_label(
+    show: Res<ShowGuideLine>,
+    state: Res<RangeSelectionState>,
+    camera: Single<(&Camera, &GlobalTransform)>,
+    mut labels: Query<(&mut Node, &mut Visibility, &GuideLineLabel)>,
+) {
+    if !show.0 {
+        for (_, mut vis, _) in &mut labels {
+            *vis = Visibility::Hidden;
+        }
+        return;
+    }
+    let (camera, cam_transform) = camera.into_inner();
+    let (x_pos, y_pos) = guide_line_label_positions(&state);
+
+    for (mut node, mut vis, label) in &mut labels {
+        let world_pos = match label {
+            GuideLineLabel::XAxis => x_pos,
+            GuideLineLabel::YAxis => y_pos,
+        };
+        if let Ok(screen_pos) = camera.world_to_viewport(cam_transform, world_pos) {
+            node.left = Val::Px(screen_pos.x - 25.0);
+            node.top = Val::Px(screen_pos.y - 10.0);
+            *vis = Visibility::Visible;
+        } else {
+            *vis = Visibility::Hidden;
         }
     }
 }
